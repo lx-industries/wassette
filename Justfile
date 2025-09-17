@@ -22,7 +22,24 @@ build mode="debug":
     mkdir -p bin
     cargo build --workspace {{ if mode == "release" { "--release" } else { "" } }}
     cp target/{{ mode }}/wassette bin/
-    
+
+install-local mode="debug":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        echo "install-local currently supports macOS only" >&2
+        exit 1
+    fi
+    src="target/{{ mode }}/wassette"
+    dst="/usr/local/bin/wassette"
+    if [[ ! -f "$src" ]]; then
+        echo "missing binary: $src" >&2
+        echo "run 'just build {{ mode }}' before installing" >&2
+        exit 1
+    fi
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+
 build-examples mode="debug":
     mkdir -p bin
     (cd examples/fetch-rs && just build mode)
@@ -104,4 +121,3 @@ ci-cache-info:
 ci-clean:
     docker rmi $(docker images -q wassette-ci-* 2>/dev/null) 2>/dev/null || true
     docker builder prune -f
-
