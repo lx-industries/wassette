@@ -1,3 +1,7 @@
+# Display all available recipes when running `just` without arguments
+default:
+    @just --list
+
 # Clean component target directories to avoid permission issues
 clean-test-components:
     rm -rf examples/fetch-rs/target/
