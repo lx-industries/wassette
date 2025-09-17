@@ -39,6 +39,7 @@ install-local mode="debug":
     fi
     mkdir -p "$(dirname "$dst")"
     cp "$src" "$dst"
+    codesign --force --sign - "$dst"
 
 build-examples mode="debug":
     mkdir -p bin
