@@ -25,7 +25,7 @@ build mode="debug":
     cargo build --workspace {{ if mode == "release" { "--release" } else { "" } }}
     cp target/{{ mode }}/wassette bin/
 
-# Install wassette binary locally to /usr/local/bin (macOS only)
+# Install wassette binary locally to /usr/local/bin (macOS only, requires sudo)
 install-local mode="debug":
     #!/usr/bin/env bash
     set -euo pipefail
