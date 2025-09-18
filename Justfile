@@ -63,6 +63,47 @@ clean:
 component2json path="examples/fetch-rs/target/wasm32-wasip2/release/fetch_rs.wasm":
     cargo run --bin component2json -p component2json -- {{ path }}
 
+check-local-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    # Get current git commit
+    current_commit=$(git rev-parse HEAD)
+    short_commit=$(git rev-parse --short HEAD)
+    
+    # Get version from wassette binary
+    if ! command -v wassette &> /dev/null; then
+        echo "❌ wassette binary not found in PATH"
+        echo "   Run 'just build && just install-local' to install"
+        exit 1
+    fi
+    
+    version_output=$(wassette --version)
+    version_commit=$(echo "$version_output" | grep -o 'GitRevision:"[^"]*"' | cut -d'"' -f2)
+    
+    echo "Current commit:  $current_commit ($short_commit)"
+    echo "Wassette commit: $version_commit"
+    echo ""
+    
+    if [[ "$current_commit" == "$version_commit" ]]; then
+        echo "✅ Versions match! Your wassette binary is up to date."
+    else
+        echo "❌ Version mismatch!"
+        echo "   Your wassette binary was built from a different commit."
+        echo "   Run 'just build && just install-local' to update."
+        
+        # Show if current commit is ahead/behind
+        if git merge-base --is-ancestor "$version_commit" "$current_commit" 2>/dev/null; then
+            commits_ahead=$(git rev-list --count "$version_commit".."$current_commit")
+            echo "   Current commit is $commits_ahead commits ahead of binary."
+        elif git merge-base --is-ancestor "$current_commit" "$version_commit" 2>/dev/null; then
+            commits_behind=$(git rev-list --count "$current_commit".."$version_commit")
+            echo "   Current commit is $commits_behind commits behind binary."
+        else
+            echo "   Commits have diverged."
+        fi
+    fi
+
 run RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse
 
