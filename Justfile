@@ -44,11 +44,11 @@ install-local mode="debug":
     cp "$src" "$dst"
     codesign --force --sign - "$dst"
 
-# Build all example components and copy them to bin/ directory
+# Build all example components and copy them to bin/ directory (mode applies to Rust examples only)
 build-examples mode="debug":
     mkdir -p bin
-    (cd examples/fetch-rs && just build mode)
-    (cd examples/filesystem-rs && just build mode)
+    (cd examples/fetch-rs && just build {{ mode }})
+    (cd examples/filesystem-rs && just build {{ mode }})
     (cd examples/get-weather-js && just build)
     (cd examples/time-server-js && just build)
     (cd examples/eval-py && just build)
@@ -123,7 +123,7 @@ run-streamable RUST_LOG='info':
 run-filesystem RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --plugin-dir ./examples/filesystem-rs
 
-# Requires an openweather API key in the environment variable OPENWEATHER_API_KEY
+# Run wassette server with get-weather example component loaded (requires OPENWEATHER_API_KEY)
 run-get-weather RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --plugin-dir ./examples/get-weather-js
 
@@ -166,7 +166,7 @@ ci-build-test:
     cargo test --workspace -- --nocapture
     cargo test --doc --workspace -- --nocapture
 
-# Build and test components for CI with GitHub Container Registry (includes ignored tests)
+# Build and test components for CI including ignored tests (for GHCR environments)
 ci-build-test-ghcr:
     just build-test-components
     cargo build --workspace
