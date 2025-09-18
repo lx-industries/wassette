@@ -13,16 +13,19 @@ build-test-components:
     (cd examples/fetch-rs && cargo build --release --target wasm32-wasip2)
     (cd examples/filesystem-rs && cargo build --release --target wasm32-wasip2)
 
+# Run all tests including workspace and documentation tests
 test:
     just build-test-components
     cargo test --workspace -- --nocapture
     cargo test --doc --workspace -- --nocapture
 
+# Build the wassette binary in debug or release mode (default: debug)
 build mode="debug":
     mkdir -p bin
     cargo build --workspace {{ if mode == "release" { "--release" } else { "" } }}
     cp target/{{ mode }}/wassette bin/
 
+# Install wassette binary locally to /usr/local/bin (macOS only)
 install-local mode="debug":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -41,6 +44,7 @@ install-local mode="debug":
     cp "$src" "$dst"
     codesign --force --sign - "$dst"
 
+# Build all example components and copy them to bin/ directory
 build-examples mode="debug":
     mkdir -p bin
     (cd examples/fetch-rs && just build mode)
@@ -56,13 +60,16 @@ build-examples mode="debug":
     cp examples/eval-py/eval.wasm bin/eval-py.wasm
     cp examples/gomodule-go/gomodule.wasm bin/gomodule.wasm
     
+# Clean all build artifacts and remove bin directory
 clean:
     cargo clean
     rm -rf bin
 
+# Convert a WebAssembly component to JSON format for inspection
 component2json path="examples/fetch-rs/target/wasm32-wasip2/release/fetch_rs.wasm":
     cargo run --bin component2json -p component2json -- {{ path }}
 
+# Check if locally installed wassette binary matches current git commit
 check-local-version:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -104,12 +111,15 @@ check-local-version:
         fi
     fi
 
+# Run wassette server with SSE transport and info logging
 run RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse
 
+# Run wassette server with streamable HTTP transport and info logging
 run-streamable RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --streamable-http
 
+# Run wassette server with filesystem example component loaded
 run-filesystem RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --plugin-dir ./examples/filesystem-rs
 
@@ -117,20 +127,25 @@ run-filesystem RUST_LOG='info':
 run-get-weather RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --plugin-dir ./examples/get-weather-js
 
+# Run wassette server with fetch-rs example component loaded
 run-fetch-rs RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --plugin-dir ./examples/fetch-rs
 
 # Documentation commands
+# Build the documentation book using mdbook
 docs-build:
     cd docs && mdbook build
 
+# Serve the documentation book and open in browser
 docs-serve:
     cd docs && mdbook serve --open
 
+# Serve the documentation book with auto-reload on changes
 docs-watch:
     cd docs && mdbook serve
 
 # CI Docker commands - automatically handle user mapping to prevent permission issues
+# Build and run CI tests locally using Docker
 ci-local:
     docker build \
         --build-arg USER_ID=$(id -u) \
@@ -144,22 +159,26 @@ ci-local:
         -e GITHUB_TOKEN \
         wassette-ci-local just ci-build-test
 
+# Build and test components for CI (standard tests)
 ci-build-test:
     just build-test-components
     cargo build --workspace
     cargo test --workspace -- --nocapture
     cargo test --doc --workspace -- --nocapture
 
+# Build and test components for CI with GitHub Container Registry (includes ignored tests)
 ci-build-test-ghcr:
     just build-test-components
     cargo build --workspace
     cargo test --workspace -- --nocapture --include-ignored
     cargo test --doc --workspace -- --nocapture
 
+# Display Docker cache and image information
 ci-cache-info:
     docker system df
     docker images wassette-ci-*
 
+# Clean up CI Docker images and cache
 ci-clean:
     docker rmi $(docker images -q wassette-ci-* 2>/dev/null) 2>/dev/null || true
     docker builder prune -f
