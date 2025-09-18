@@ -86,6 +86,12 @@ check-local-version:
     fi
     
     version_output=$(wassette --version)
+    if [[ "$version_output" != *"BuildInfo{"* ]]; then
+        echo "❌ wassette --version output is missing BuildInfo details"
+        echo "   The installed binary is too old for this check"
+        echo "   Run 'just build && just install-local' to update"
+        exit 1
+    fi
     version_commit=$(echo "$version_output" | grep -o 'GitRevision:"[^"]*"' | cut -d'"' -f2)
     
     echo "Current commit:  $current_commit ($short_commit)"
