@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - `wassette secret set` now returns a clear error message when the component ID is not found, preventing silent failures and providing better user feedback
-- Fixed invalid `workflows` permission in dependabot-automerge workflow file that caused GitHub Actions validation error
+- Added missing `workflows: write` permission to dependabot-automerge workflow file to allow auto-merge on PRs that modify workflow files
 - Fixed Mermaid sequence diagram rendering in documentation by adding mdbook-mermaid preprocessor configuration
 - Copyright check script now skips auto-generated `bindings.rs` files containing wit-bindgen markers, preventing incorrect license header additions to generated code while still checking custom bindings.rs files
 
