@@ -23,7 +23,8 @@ use mcp_server::{
 };
 use rmcp::model::{
     CallToolRequestParam, CallToolResult, ErrorData, ListPromptsResult, ListResourcesResult,
-    ListToolsResult, PaginatedRequestParam, ServerCapabilities, ServerInfo, ToolsCapability,
+    ListToolsResult, LoggingLevel, PaginatedRequestParam, ServerCapabilities, ServerInfo,
+    SetLevelRequestParam, ToolsCapability,
 };
 use rmcp::service::{serve_server, RequestContext, RoleServer};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
@@ -37,6 +38,7 @@ use tracing_subscriber::util::SubscriberInitExt as _;
 mod commands;
 mod config;
 mod format;
+mod mcp_logging;
 
 use commands::{
     Cli, Commands, ComponentCommands, GrantPermissionCommands, PermissionCommands, PolicyCommands,
@@ -194,6 +196,7 @@ const BIND_ADDRESS: &str = "127.0.0.1:9001";
 pub struct McpServer {
     lifecycle_manager: LifecycleManager,
     peer: Arc<Mutex<Option<rmcp::Peer<rmcp::RoleServer>>>>,
+    log_level: Arc<Mutex<Option<LoggingLevel>>>,
 }
 
 /// Handle CLI tool commands by creating appropriate tool call requests
@@ -301,6 +304,7 @@ impl McpServer {
         Self {
             lifecycle_manager,
             peer: Arc::new(Mutex::new(None)),
+            log_level: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -326,6 +330,7 @@ impl ServerHandler for McpServer {
                 tools: Some(ToolsCapability {
                     list_changed: Some(true),
                 }),
+                logging: Some(serde_json::Map::new()),
                 ..Default::default()
             },
             instructions: Some(
@@ -421,6 +426,21 @@ Key points:
             }
         })
     }
+
+    fn set_level<'a>(
+        &'a self,
+        params: SetLevelRequestParam,
+        _ctx: RequestContext<RoleServer>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ErrorData>> + Send + 'a>> {
+        Box::pin(async move {
+            // Store the requested log level
+            let mut log_level = self.log_level.lock().unwrap();
+            *log_level = Some(params.level);
+
+            tracing::info!("MCP logging level set to: {:?}", params.level);
+            Ok(())
+        })
+    }
 }
 
 /// Formats build information similar to agentgateway's version output
@@ -482,23 +502,6 @@ async fn main() -> Result<()> {
                     .into()
                 });
 
-                let registry = tracing_subscriber::registry().with(env_filter);
-
-                // Initialize logging based on transport type
-                let transport: Transport = (&cfg.transport).into();
-                match transport {
-                    Transport::Stdio => {
-                        registry
-                            .with(
-                                tracing_subscriber::fmt::layer()
-                                    .with_writer(std::io::stderr)
-                                    .with_ansi(false),
-                            )
-                            .init();
-                    }
-                    _ => registry.with(tracing_subscriber::fmt::layer()).init(),
-                }
-
                 let config =
                     config::Config::from_serve(cfg).context("Failed to load configuration")?;
 
@@ -520,6 +523,31 @@ async fn main() -> Result<()> {
                     .await?;
 
                 let server = McpServer::new(lifecycle_manager.clone());
+
+                // Create MCP logging layer that can forward logs to MCP clients
+                let mcp_layer = mcp_logging::McpLoggingLayer::new(
+                    server.peer.clone(),
+                    server.log_level.clone(),
+                );
+
+                let registry = tracing_subscriber::registry()
+                    .with(env_filter)
+                    .with(mcp_layer);
+
+                // Initialize logging based on transport type
+                let transport: Transport = (&cfg.transport).into();
+                match transport {
+                    Transport::Stdio => {
+                        registry
+                            .with(
+                                tracing_subscriber::fmt::layer()
+                                    .with_writer(std::io::stderr)
+                                    .with_ansi(false),
+                            )
+                            .init();
+                    }
+                    _ => registry.with(tracing_subscriber::fmt::layer()).init(),
+                }
 
                 // Start background component loading
                 let server_clone = server.clone();

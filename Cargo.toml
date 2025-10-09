@@ -13,6 +13,7 @@ license-file = "LICENSE"
 
 [workspace.dependencies]
 anyhow = "1.0"
+chrono = "0.4"
 component2json = { path = "crates/component2json" }
 etcetera = "0.10"
 futures = "0.3"
@@ -45,6 +46,7 @@ wasmtime-wasi-config = "36"
 [dependencies]
 anyhow = { workspace = true }
 axum = "0.8"
+chrono = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
 etcetera = { workspace = true }
 figment = { version = "0.10", features = ["env", "toml"] }
