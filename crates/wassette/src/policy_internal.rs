@@ -1444,6 +1444,101 @@ permissions:
     }
 
     #[test]
+    fn test_add_cpu_resource_permission_to_policy() -> Result<()> {
+        let manager_result = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async { create_test_manager().await });
+        let manager = manager_result.unwrap();
+
+        // Create a minimal policy
+        let mut policy = policy::PolicyDocument {
+            version: "1.0".to_string(),
+            description: Some("Test policy".to_string()),
+            permissions: policy::Permissions::default(),
+        };
+
+        // Test adding CPU resource permission
+        let resource_details = serde_json::json!({
+            "resources": {
+                "limits": {
+                    "cpu": "500m"
+                }
+            }
+        });
+
+        manager
+            .manager
+            .policy_manager
+            .add_resource_permission_to_policy(&mut policy, resource_details)?;
+
+        // Verify the policy has the CPU resource permission
+        let resources = policy.permissions.resources.expect("Should have resources");
+        let limits = resources.limits.expect("Should have limits");
+        let cpu = limits.cpu.expect("Should have CPU limit");
+
+        match cpu {
+            policy::CpuLimit::String(cpu_str) => {
+                assert_eq!(cpu_str, "500m");
+            }
+            _ => panic!("Expected string CPU limit"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_cpu_and_memory_resource_permissions_to_policy() -> Result<()> {
+        let manager_result = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async { create_test_manager().await });
+        let manager = manager_result.unwrap();
+
+        // Create a minimal policy
+        let mut policy = policy::PolicyDocument {
+            version: "1.0".to_string(),
+            description: Some("Test policy".to_string()),
+            permissions: policy::Permissions::default(),
+        };
+
+        // Test adding both CPU and memory resource permissions at once
+        let resource_details = serde_json::json!({
+            "resources": {
+                "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                }
+            }
+        });
+
+        manager
+            .manager
+            .policy_manager
+            .add_resource_permission_to_policy(&mut policy, resource_details)?;
+
+        // Verify the policy has both resource permissions
+        let resources = policy.permissions.resources.expect("Should have resources");
+        let limits = resources.limits.expect("Should have limits");
+
+        let cpu = limits.cpu.as_ref().expect("Should have CPU limit");
+        match cpu {
+            policy::CpuLimit::String(cpu_str) => {
+                assert_eq!(cpu_str, "2");
+            }
+            _ => panic!("Expected string CPU limit"),
+        }
+
+        let memory = limits.memory.as_ref().expect("Should have memory limit");
+        match memory {
+            policy::MemoryLimit::String(mem_str) => {
+                assert_eq!(mem_str, "1Gi");
+            }
+            _ => panic!("Expected string memory limit"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn test_access_type_serialization() -> Result<()> {
         // Test serialization of AccessType
         let read_access = AccessType::Read;
