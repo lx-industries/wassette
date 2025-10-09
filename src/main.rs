@@ -427,6 +427,7 @@ Key points:
         })
     }
 
+    #[allow(clippy::manual_async_fn)]
     fn set_level(
         &self,
         params: SetLevelRequestParam,

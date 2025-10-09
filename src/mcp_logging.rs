@@ -59,7 +59,7 @@ impl<S: Subscriber> Layer<S> for McpLoggingLayer {
         let mcp_level = Self::tracing_to_mcp_level(metadata.level());
 
         // Check if we should forward this log level
-        if !self.should_forward(mcp_level.clone()) {
+        if !self.should_forward(mcp_level) {
             return;
         }
 
