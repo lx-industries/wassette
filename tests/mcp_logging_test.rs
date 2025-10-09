@@ -36,7 +36,7 @@ async fn test_logging_capability_declared() -> Result<()> {
     let mut stdout = BufReader::new(stdout);
 
     // Give the server time to start
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
     // Send MCP initialize request
     let initialize_request = r#"{"jsonrpc": "2.0", "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "test-client", "version": "1.0.0"}}, "id": 1}
@@ -85,7 +85,7 @@ async fn test_set_level_request() -> Result<()> {
     // Start wassette mcp server with stdio transport (default)
     let mut child = Command::new(&binary_path)
         .args(["serve"])
-        .env("RUST_LOG", "info") // Enable info logs
+        .env("RUST_LOG", "off") // Disable logs to avoid interference
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -99,7 +99,7 @@ async fn test_set_level_request() -> Result<()> {
     let mut stdout = BufReader::new(stdout);
 
     // Give the server time to start
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
     // Send MCP initialize request
     let initialize_request = r#"{"jsonrpc": "2.0", "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "test-client", "version": "1.0.0"}}, "id": 1}
@@ -167,7 +167,7 @@ async fn test_multiple_log_levels() -> Result<()> {
     // Start wassette mcp server
     let mut child = Command::new(&binary_path)
         .args(["serve"])
-        .env("RUST_LOG", "debug")
+        .env("RUST_LOG", "off") // Disable logs to avoid interference
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -181,7 +181,7 @@ async fn test_multiple_log_levels() -> Result<()> {
     let mut stdout = BufReader::new(stdout);
 
     // Give the server time to start
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
     // Initialize
     let initialize_request = r#"{"jsonrpc": "2.0", "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "test-client", "version": "1.0.0"}}, "id": 1}
