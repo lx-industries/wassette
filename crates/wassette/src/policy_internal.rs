@@ -426,28 +426,50 @@ impl PolicyManager {
             }
             "resource" => {
                 // Handle both direct memory field and nested resources.limits.memory structure
-                let memory = if let Some(memory_str) =
-                    details.get("memory").and_then(|v| v.as_str())
-                {
-                    // Direct memory field (for backward compatibility or direct API calls)
-                    memory_str
-                } else if let Some(memory_str) = details
+                let memory =
+                    if let Some(memory_str) = details.get("memory").and_then(|v| v.as_str()) {
+                        // Direct memory field (for backward compatibility or direct API calls)
+                        Some(memory_str)
+                    } else if let Some(memory_str) = details
+                        .get("resources")
+                        .and_then(|r| r.get("limits"))
+                        .and_then(|l| l.get("memory"))
+                        .and_then(|m| m.as_str())
+                    {
+                        // Nested structure from CLI (resources.limits.memory)
+                        Some(memory_str)
+                    } else {
+                        None
+                    };
+
+                // Handle CPU limits
+                let cpu = if let Some(cpu_str) = details.get("cpu").and_then(|v| v.as_str()) {
+                    // Direct cpu field
+                    Some(cpu_str)
+                } else if let Some(cpu_str) = details
                     .get("resources")
                     .and_then(|r| r.get("limits"))
-                    .and_then(|l| l.get("memory"))
-                    .and_then(|m| m.as_str())
+                    .and_then(|l| l.get("cpu"))
+                    .and_then(|c| c.as_str())
                 {
-                    // Nested structure from CLI (resources.limits.memory)
-                    memory_str
+                    // Nested structure from CLI (resources.limits.cpu)
+                    Some(cpu_str)
                 } else {
-                    return Err(anyhow!("Missing 'memory' field for resource permission. Expected either 'memory' or 'resources.limits.memory'"));
+                    None
                 };
+
+                // At least one of memory or cpu must be provided
+                if memory.is_none() && cpu.is_none() {
+                    return Err(anyhow!(
+                        "Missing resource field. Expected 'memory', 'cpu', or both"
+                    ));
+                }
 
                 // Create structured resource limits instead of hardcoded JSON
                 let resource_limits = policy::ResourceLimits {
                     limits: Some(policy::ResourceLimitValues::new(
-                        None,
-                        Some(policy::MemoryLimit::String(memory.to_string())),
+                        cpu.map(|c| policy::CpuLimit::String(c.to_string())),
+                        memory.map(|m| policy::MemoryLimit::String(m.to_string())),
                     )),
                     ..Default::default()
                 };
@@ -620,19 +642,44 @@ impl PolicyManager {
             .and_then(|m| m.as_str())
         {
             // Original CLI format: {"resources": {"limits": {"memory": "512Mi"}}}
-            memory_str
+            Some(memory_str)
         } else if let Some(memory_str) = details
             .get("limits")
             .and_then(|l| l.get("memory"))
             .and_then(|m| m.as_str())
         {
             // Converted ResourceLimits format: {"limits": {"memory": "512Mi"}}
-            memory_str
+            Some(memory_str)
         } else {
-            return Err(anyhow!(
-                "Invalid resource permission format: missing memory field"
-            ));
+            None
         };
+
+        // Extract the CPU limit from the details - handle both formats
+        let cpu_str = if let Some(cpu_str) = details
+            .get("resources")
+            .and_then(|r| r.get("limits"))
+            .and_then(|l| l.get("cpu"))
+            .and_then(|c| c.as_str())
+        {
+            // Original CLI format: {"resources": {"limits": {"cpu": "500m"}}}
+            Some(cpu_str)
+        } else if let Some(cpu_str) = details
+            .get("limits")
+            .and_then(|l| l.get("cpu"))
+            .and_then(|c| c.as_str())
+        {
+            // Converted ResourceLimits format: {"limits": {"cpu": "500m"}}
+            Some(cpu_str)
+        } else {
+            None
+        };
+
+        // At least one of memory or cpu must be provided
+        if memory_str.is_none() && cpu_str.is_none() {
+            return Err(anyhow!(
+                "Invalid resource permission format: missing memory or cpu field"
+            ));
+        }
 
         // Initialize resources if not present
         let resources = policy
@@ -645,8 +692,15 @@ impl PolicyManager {
             .limits
             .get_or_insert_with(|| policy::ResourceLimitValues::new(None, None));
 
-        // Set the memory limit
-        limits.memory = Some(policy::MemoryLimit::String(memory_str.to_string()));
+        // Set the memory limit if provided
+        if let Some(memory) = memory_str {
+            limits.memory = Some(policy::MemoryLimit::String(memory.to_string()));
+        }
+
+        // Set the CPU limit if provided
+        if let Some(cpu) = cpu_str {
+            limits.cpu = Some(policy::CpuLimit::String(cpu.to_string()));
+        }
 
         Ok(())
     }

@@ -236,6 +236,16 @@ pub enum GrantPermissionCommands {
         #[arg(long)]
         plugin_dir: Option<PathBuf>,
     },
+    /// Grant CPU permission to a component.
+    Cpu {
+        /// Component ID to grant permission to
+        component_id: String,
+        /// CPU limit (e.g., 500m, 1, 2.5)
+        limit: String,
+        /// Directory where plugins are stored. Defaults to $XDG_DATA_HOME/wassette/components
+        #[arg(long)]
+        plugin_dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Debug)]

@@ -935,7 +935,11 @@ impl LifecycleManager {
     async fn get_wasi_state_for_component(
         &self,
         component_id: &str,
-    ) -> Result<(WassetteWasiState<WasiState>, Option<CustomResourceLimiter>)> {
+    ) -> Result<(
+        WassetteWasiState<WasiState>,
+        Option<CustomResourceLimiter>,
+        Option<f64>,
+    )> {
         let policy_template = self
             .policy_manager
             .template_for_component(component_id)
@@ -944,9 +948,10 @@ impl LifecycleManager {
         let wasi_state = policy_template.build()?;
         let allowed_hosts = policy_template.allowed_hosts.clone();
         let resource_limiter = wasi_state.resource_limiter.clone();
+        let cpu_limit = policy_template.cpu_limit;
 
         let wassette_wasi_state = WassetteWasiState::new(wasi_state, allowed_hosts)?;
-        Ok((wassette_wasi_state, resource_limiter))
+        Ok((wassette_wasi_state, resource_limiter, cpu_limit))
     }
 
     /// Executes a function call on a WebAssembly component
@@ -962,7 +967,8 @@ impl LifecycleManager {
             .await
             .ok_or_else(|| anyhow!("Component not found: {}", component_id))?;
 
-        let (state, resource_limiter) = self.get_wasi_state_for_component(component_id).await?;
+        let (state, resource_limiter, cpu_limit) =
+            self.get_wasi_state_for_component(component_id).await?;
 
         let mut store = Store::new(self.runtime.as_ref(), state);
 
@@ -977,6 +983,13 @@ impl LifecycleManager {
                     .as_mut()
                     .expect("Resource limiter should be present - checked above")
             });
+        }
+
+        // Apply CPU limits if configured in the policy using fuel
+        // Convert CPU cores to fuel units (1 core ≈ 10 billion instructions)
+        if let Some(cpu_cores) = cpu_limit {
+            let fuel = (cpu_cores * 10_000_000_000.0) as u64;
+            store.set_fuel(fuel)?;
         }
 
         let instance = component.instance_pre.instantiate_async(&mut store).await?;

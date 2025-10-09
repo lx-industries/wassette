@@ -162,6 +162,8 @@ pub struct WasiStateTemplate {
     pub memory_limit: Option<u64>,
     /// Store limits for wasmtime (built from memory_limit)
     pub store_limits: Option<wasmtime::StoreLimits>,
+    /// CPU limit in cores for the component
+    pub cpu_limit: Option<f64>,
 }
 
 impl Default for WasiStateTemplate {
@@ -176,6 +178,7 @@ impl Default for WasiStateTemplate {
             allowed_hosts: HashSet::new(),
             memory_limit: None,
             store_limits: None,
+            cpu_limit: None,
         }
     }
 }
@@ -192,6 +195,7 @@ pub fn create_wasi_state_template_from_policy(
     let preopened_dirs = extract_storage_permissions(policy, plugin_dir)?;
     let allowed_hosts = extract_allowed_hosts(policy);
     let memory_limit = extract_memory_limit(policy)?;
+    let cpu_limit = extract_cpu_limit(policy)?;
     let store_limits = memory_limit
         .map(|limit| -> anyhow::Result<wasmtime::StoreLimits> {
             let limit_usize = limit.try_into().map_err(|_| {
@@ -209,6 +213,7 @@ pub fn create_wasi_state_template_from_policy(
         preopened_dirs,
         allowed_hosts,
         memory_limit,
+        cpu_limit,
         store_limits,
         ..Default::default()
     })
@@ -345,6 +350,25 @@ pub(crate) fn extract_memory_limit(policy: &PolicyDocument) -> anyhow::Result<Op
         if let Some(legacy_memory) = resources.memory {
             // Legacy numeric values are assumed to be in MB
             return Ok(Some(legacy_memory * 1024 * 1024));
+        }
+    }
+
+    Ok(None)
+}
+
+/// Extract CPU limit from the policy document
+pub(crate) fn extract_cpu_limit(policy: &PolicyDocument) -> anyhow::Result<Option<f64>> {
+    if let Some(resources) = &policy.permissions.resources {
+        // Check the new k8s-style limits first
+        if let Some(limits) = &resources.limits {
+            if let Some(cpu_limit) = &limits.cpu {
+                return Ok(Some(cpu_limit.to_cores()?));
+            }
+        }
+
+        // Fall back to legacy cpu field for backward compatibility
+        if let Some(legacy_cpu) = resources.cpu {
+            return Ok(Some(legacy_cpu));
         }
     }
 
@@ -743,6 +767,52 @@ permissions:
     }
 
     #[test]
+    fn test_extract_cpu_limit() {
+        // Test with k8s-style CPU limit in millicores
+        let yaml_content = r#"
+version: "1.0"
+description: "Policy with CPU limit in millicores"
+permissions:
+  resources:
+    limits:
+      cpu: "500m"
+"#;
+        let policy = PolicyParser::parse_str(yaml_content).unwrap();
+        let cpu_limit = extract_cpu_limit(&policy).unwrap();
+        assert_eq!(cpu_limit, Some(0.5));
+
+        // Test with k8s-style CPU limit in cores
+        let yaml_content_cores = r#"
+version: "1.0"
+description: "Policy with CPU limit in cores"
+permissions:
+  resources:
+    limits:
+      cpu: "2"
+"#;
+        let policy_cores = PolicyParser::parse_str(yaml_content_cores).unwrap();
+        let cpu_limit_cores = extract_cpu_limit(&policy_cores).unwrap();
+        assert_eq!(cpu_limit_cores, Some(2.0));
+
+        // Test with legacy CPU limit
+        let yaml_content_legacy = r#"
+version: "1.0"
+description: "Policy with legacy CPU limit"
+permissions:
+  resources:
+    cpu: 1.5
+"#;
+        let policy_legacy = PolicyParser::parse_str(yaml_content_legacy).unwrap();
+        let cpu_limit_legacy = extract_cpu_limit(&policy_legacy).unwrap();
+        assert_eq!(cpu_limit_legacy, Some(1.5));
+
+        // Test with no CPU limit
+        let policy_no_cpu = create_zero_permission_policy();
+        let cpu_limit_none = extract_cpu_limit(&policy_no_cpu).unwrap();
+        assert_eq!(cpu_limit_none, None);
+    }
+
+    #[test]
     fn test_create_wasi_state_template_with_memory_limit() {
         let temp_dir = TempDir::new().unwrap();
         let plugin_dir = temp_dir.path();
@@ -761,6 +831,51 @@ permissions:
             create_wasi_state_template_from_policy(&policy, plugin_dir, &env_vars, None).unwrap();
 
         assert_eq!(template.memory_limit, Some(512 * 1024 * 1024));
+        assert!(template.store_limits.is_some());
+    }
+
+    #[test]
+    fn test_create_wasi_state_template_with_cpu_limit() {
+        let temp_dir = TempDir::new().unwrap();
+        let plugin_dir = temp_dir.path();
+
+        let yaml_content = r#"
+version: "1.0"
+description: "Policy with CPU limit"
+permissions:
+  resources:
+    limits:
+      cpu: "500m"
+"#;
+        let policy = PolicyParser::parse_str(yaml_content).unwrap();
+        let env_vars = HashMap::new(); // Empty environment for test
+        let template =
+            create_wasi_state_template_from_policy(&policy, plugin_dir, &env_vars, None).unwrap();
+
+        assert_eq!(template.cpu_limit, Some(0.5));
+    }
+
+    #[test]
+    fn test_create_wasi_state_template_with_cpu_and_memory_limits() {
+        let temp_dir = TempDir::new().unwrap();
+        let plugin_dir = temp_dir.path();
+
+        let yaml_content = r#"
+version: "1.0"
+description: "Policy with CPU and memory limits"
+permissions:
+  resources:
+    limits:
+      cpu: "2"
+      memory: "1Gi"
+"#;
+        let policy = PolicyParser::parse_str(yaml_content).unwrap();
+        let env_vars = HashMap::new(); // Empty environment for test
+        let template =
+            create_wasi_state_template_from_policy(&policy, plugin_dir, &env_vars, None).unwrap();
+
+        assert_eq!(template.cpu_limit, Some(2.0));
+        assert_eq!(template.memory_limit, Some(1024 * 1024 * 1024));
         assert!(template.store_limits.is_some());
     }
 

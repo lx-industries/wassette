@@ -55,6 +55,7 @@ enum ToolName {
     GrantNetworkPermission,
     GrantEnvironmentVariablePermission,
     GrantMemoryPermission,
+    GrantCpuPermission,
     RevokeStoragePermission,
     RevokeNetworkPermission,
     RevokeEnvironmentVariablePermission,
@@ -73,6 +74,7 @@ impl ToolName {
             Self::GrantNetworkPermission => Self::GRANT_NETWORK_PERMISSION,
             Self::GrantEnvironmentVariablePermission => Self::GRANT_ENVIRONMENT_VARIABLE_PERMISSION,
             Self::GrantMemoryPermission => Self::GRANT_MEMORY_PERMISSION,
+            Self::GrantCpuPermission => Self::GRANT_CPU_PERMISSION,
             Self::RevokeStoragePermission => Self::REVOKE_STORAGE_PERMISSION,
             Self::RevokeNetworkPermission => Self::REVOKE_NETWORK_PERMISSION,
             Self::RevokeEnvironmentVariablePermission => {
@@ -92,6 +94,7 @@ impl ToolName {
     const GRANT_ENVIRONMENT_VARIABLE_PERMISSION: &'static str =
         "grant-environment-variable-permission";
     const GRANT_MEMORY_PERMISSION: &'static str = "grant-memory-permission";
+    const GRANT_CPU_PERMISSION: &'static str = "grant-cpu-permission";
     const REVOKE_STORAGE_PERMISSION: &'static str = "revoke-storage-permission";
     const REVOKE_NETWORK_PERMISSION: &'static str = "revoke-network-permission";
     const REVOKE_ENVIRONMENT_VARIABLE_PERMISSION: &'static str =
@@ -114,6 +117,7 @@ impl TryFrom<&str> for ToolName {
                 Ok(Self::GrantEnvironmentVariablePermission)
             }
             Self::GRANT_MEMORY_PERMISSION => Ok(Self::GrantMemoryPermission),
+            Self::GRANT_CPU_PERMISSION => Ok(Self::GrantCpuPermission),
             Self::REVOKE_STORAGE_PERMISSION => Ok(Self::RevokeStoragePermission),
             Self::REVOKE_NETWORK_PERMISSION => Ok(Self::RevokeNetworkPermission),
             Self::REVOKE_ENVIRONMENT_VARIABLE_PERMISSION => {
@@ -245,6 +249,9 @@ async fn handle_tool_cli_command(
         }
         ToolName::GrantMemoryPermission => {
             handle_grant_memory_permission(&req, lifecycle_manager).await?
+        }
+        ToolName::GrantCpuPermission => {
+            handle_grant_cpu_permission(&req, lifecycle_manager).await?
         }
         ToolName::RevokeStoragePermission => {
             handle_revoke_storage_permission(&req, lifecycle_manager).await?
@@ -775,6 +782,33 @@ async fn main() -> Result<()> {
                         handle_tool_cli_command(
                             &lifecycle_manager,
                             "grant-memory-permission",
+                            args,
+                            OutputFormat::Json,
+                        )
+                        .await?;
+                    }
+                    GrantPermissionCommands::Cpu {
+                        component_id,
+                        limit,
+                        plugin_dir,
+                    } => {
+                        let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                        let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
+                        let mut args = Map::new();
+                        args.insert("component_id".to_string(), json!(component_id));
+                        args.insert(
+                            "details".to_string(),
+                            json!({
+                                "resources": {
+                                    "limits": {
+                                        "cpu": limit
+                                    }
+                                }
+                            }),
+                        );
+                        handle_tool_cli_command(
+                            &lifecycle_manager,
+                            "grant-cpu-permission",
                             args,
                             OutputFormat::Json,
                         )

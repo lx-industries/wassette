@@ -709,6 +709,60 @@ async fn handle_revoke_permission_generic(
     }
 }
 
+pub async fn handle_grant_cpu_permission(
+    req: &CallToolRequestParam,
+    lifecycle_manager: &LifecycleManager,
+) -> Result<CallToolResult> {
+    let args = extract_args_from_request(req)?;
+
+    let component_id = args
+        .get("component_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing required argument: 'component_id'"))?;
+
+    let details = args
+        .get("details")
+        .ok_or_else(|| anyhow::anyhow!("Missing required argument: 'details'"))?;
+
+    info!("Granting CPU permission to component {}", component_id);
+
+    lifecycle_manager
+        .ensure_component_loaded(component_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("Component not found: {} ({})", component_id, e))?;
+
+    let result = lifecycle_manager
+        .grant_permission(component_id, "resource", details)
+        .await;
+
+    match result {
+        Ok(()) => {
+            let status_text = serde_json::to_string(&json!({
+                "status": "permission granted successfully",
+                "component_id": component_id,
+                "permission_type": "cpu",
+                "details": details
+            }))?;
+
+            let contents = vec![Content::text(status_text)];
+
+            Ok(CallToolResult {
+                content: Some(contents),
+                structured_content: None,
+                is_error: None,
+            })
+        }
+        Err(e) => {
+            error!("Failed to grant CPU permission: {}", e);
+            Err(anyhow::anyhow!(
+                "Failed to grant CPU permission to component {}: {}",
+                component_id,
+                e
+            ))
+        }
+    }
+}
+
 #[instrument(skip(lifecycle_manager))]
 pub async fn handle_revoke_storage_permission(
     req: &CallToolRequestParam,
