@@ -18,6 +18,7 @@
 
 - [CLI](./reference/cli.md)
 - [Permissions](./reference/permissions.md)
+- [MCP Logging](./mcp-logging.md)
 
 # Design & Architecture
 
