@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- MCP logging capability declaration and `logging/setLevel` request handler that allows MCP clients to control structured log output according to the MCP protocol specification (2025-06-18) ([#340](https://github.com/microsoft/wassette/pull/340))
+- MCP logging layer (`mcp_logging.rs`) that bridges tracing log events to MCP logging notifications with support for all syslog severity levels (Debug, Info, Notice, Warning, Error, Critical, Alert, Emergency)
 - AI agent development guides (`AGENTS.md` and `Claude.md`) that consolidate development guidelines from `.github/instructions/` into accessible documentation for AI agents working on the project
 - Comprehensive installation guide page consolidating all installation methods (one-liner script, Homebrew, Nix, WinGet) organized by platform (Linux, macOS, Windows) with verification steps and troubleshooting sections
 - Cookbook section in documentation with language-specific guides for building Wasm components in JavaScript/TypeScript, Python, Rust, and Go ([#328](https://github.com/microsoft/wassette/pull/328))

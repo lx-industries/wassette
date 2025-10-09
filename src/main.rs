@@ -427,19 +427,19 @@ Key points:
         })
     }
 
-    fn set_level<'a>(
-        &'a self,
+    fn set_level(
+        &self,
         params: SetLevelRequestParam,
         _ctx: RequestContext<RoleServer>,
-    ) -> Pin<Box<dyn Future<Output = Result<(), ErrorData>> + Send + 'a>> {
-        Box::pin(async move {
+    ) -> impl Future<Output = Result<(), ErrorData>> + Send + '_ {
+        async move {
             // Store the requested log level
             let mut log_level = self.log_level.lock().unwrap();
             *log_level = Some(params.level);
 
             tracing::info!("MCP logging level set to: {:?}", params.level);
             Ok(())
-        })
+        }
     }
 }
 
