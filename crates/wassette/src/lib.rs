@@ -990,6 +990,9 @@ impl LifecycleManager {
         if let Some(cpu_cores) = cpu_limit {
             let fuel = (cpu_cores * 10_000_000_000.0) as u64;
             store.set_fuel(fuel)?;
+        } else {
+            // Set unlimited fuel when no CPU limit is configured
+            store.set_fuel(u64::MAX)?;
         }
 
         let instance = component.instance_pre.instantiate_async(&mut store).await?;
