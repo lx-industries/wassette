@@ -426,37 +426,32 @@ impl PolicyManager {
             }
             "resource" => {
                 // Handle both direct memory field and nested resources.limits.memory structure
-                let memory =
-                    if let Some(memory_str) = details.get("memory").and_then(|v| v.as_str()) {
-                        // Direct memory field (for backward compatibility or direct API calls)
-                        Some(memory_str)
-                    } else if let Some(memory_str) = details
-                        .get("resources")
-                        .and_then(|r| r.get("limits"))
-                        .and_then(|l| l.get("memory"))
-                        .and_then(|m| m.as_str())
-                    {
+                let memory = details
+                    .get("memory")
+                    .and_then(|v| v.as_str())
+                    // Direct memory field (for backward compatibility or direct API calls)
+                    .or_else(|| {
+                        details
+                            .get("resources")
+                            .and_then(|r| r.get("limits"))
+                            .and_then(|l| l.get("memory"))
+                            .and_then(|m| m.as_str())
                         // Nested structure from CLI (resources.limits.memory)
-                        Some(memory_str)
-                    } else {
-                        None
-                    };
+                    });
 
                 // Handle CPU limits
-                let cpu = if let Some(cpu_str) = details.get("cpu").and_then(|v| v.as_str()) {
+                let cpu = details
+                    .get("cpu")
+                    .and_then(|v| v.as_str())
                     // Direct cpu field
-                    Some(cpu_str)
-                } else if let Some(cpu_str) = details
-                    .get("resources")
-                    .and_then(|r| r.get("limits"))
-                    .and_then(|l| l.get("cpu"))
-                    .and_then(|c| c.as_str())
-                {
-                    // Nested structure from CLI (resources.limits.cpu)
-                    Some(cpu_str)
-                } else {
-                    None
-                };
+                    .or_else(|| {
+                        details
+                            .get("resources")
+                            .and_then(|r| r.get("limits"))
+                            .and_then(|l| l.get("cpu"))
+                            .and_then(|c| c.as_str())
+                        // Nested structure from CLI (resources.limits.cpu)
+                    });
 
                 // At least one of memory or cpu must be provided
                 if memory.is_none() && cpu.is_none() {
@@ -635,44 +630,34 @@ impl PolicyManager {
         details: serde_json::Value,
     ) -> Result<()> {
         // Extract the memory limit from the details - handle both original CLI format and converted ResourceLimits format
-        let memory_str = if let Some(memory_str) = details
+        let memory_str = details
             .get("resources")
             .and_then(|r| r.get("limits"))
             .and_then(|l| l.get("memory"))
             .and_then(|m| m.as_str())
-        {
             // Original CLI format: {"resources": {"limits": {"memory": "512Mi"}}}
-            Some(memory_str)
-        } else if let Some(memory_str) = details
-            .get("limits")
-            .and_then(|l| l.get("memory"))
-            .and_then(|m| m.as_str())
-        {
-            // Converted ResourceLimits format: {"limits": {"memory": "512Mi"}}
-            Some(memory_str)
-        } else {
-            None
-        };
+            .or_else(|| {
+                details
+                    .get("limits")
+                    .and_then(|l| l.get("memory"))
+                    .and_then(|m| m.as_str())
+                // Converted ResourceLimits format: {"limits": {"memory": "512Mi"}}
+            });
 
         // Extract the CPU limit from the details - handle both formats
-        let cpu_str = if let Some(cpu_str) = details
+        let cpu_str = details
             .get("resources")
             .and_then(|r| r.get("limits"))
             .and_then(|l| l.get("cpu"))
             .and_then(|c| c.as_str())
-        {
             // Original CLI format: {"resources": {"limits": {"cpu": "500m"}}}
-            Some(cpu_str)
-        } else if let Some(cpu_str) = details
-            .get("limits")
-            .and_then(|l| l.get("cpu"))
-            .and_then(|c| c.as_str())
-        {
-            // Converted ResourceLimits format: {"limits": {"cpu": "500m"}}
-            Some(cpu_str)
-        } else {
-            None
-        };
+            .or_else(|| {
+                details
+                    .get("limits")
+                    .and_then(|l| l.get("cpu"))
+                    .and_then(|c| c.as_str())
+                // Converted ResourceLimits format: {"limits": {"cpu": "500m"}}
+            });
 
         // At least one of memory or cpu must be provided
         if memory_str.is_none() && cpu_str.is_none() {
