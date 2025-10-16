@@ -26,8 +26,14 @@ impl RuntimeContext {
         let mut config = wasmtime::Config::new();
         config.wasm_component_model(true);
         config.async_support(true);
-        // Enable fuel consumption for CPU limiting
+
+        // Enable fuel consumption for CPU limiting (only when actually needed)
+        // Note: This is still enabled globally but fuel will only be set when CPU limits exist
         config.consume_fuel(true);
+
+        // Enable epoch interruption for preemption (helps with long-running host calls)
+        // Epochs provide a way to interrupt execution even during host function calls
+        config.epoch_interruption(true);
 
         let engine = Arc::new(Engine::new(&config)?);
 

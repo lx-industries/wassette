@@ -938,7 +938,7 @@ impl LifecycleManager {
     ) -> Result<(
         WassetteWasiState<WasiState>,
         Option<CustomResourceLimiter>,
-        Option<f64>,
+        Option<u64>,
     )> {
         let policy_template = self
             .policy_manager
@@ -948,10 +948,10 @@ impl LifecycleManager {
         let wasi_state = policy_template.build()?;
         let allowed_hosts = policy_template.allowed_hosts.clone();
         let resource_limiter = wasi_state.resource_limiter.clone();
-        let cpu_limit = policy_template.cpu_limit;
+        let cpu_limit_millicores = policy_template.cpu_limit_millicores;
 
         let wassette_wasi_state = WassetteWasiState::new(wasi_state, allowed_hosts)?;
-        Ok((wassette_wasi_state, resource_limiter, cpu_limit))
+        Ok((wassette_wasi_state, resource_limiter, cpu_limit_millicores))
     }
 
     /// Executes a function call on a WebAssembly component
@@ -967,7 +967,7 @@ impl LifecycleManager {
             .await
             .ok_or_else(|| anyhow!("Component not found: {}", component_id))?;
 
-        let (state, resource_limiter, cpu_limit) =
+        let (state, resource_limiter, cpu_limit_millicores) =
             self.get_wasi_state_for_component(component_id).await?;
 
         let mut store = Store::new(self.runtime.as_ref(), state);
@@ -986,14 +986,26 @@ impl LifecycleManager {
         }
 
         // Apply CPU limits if configured in the policy using fuel
-        // Convert CPU cores to fuel units (1 core ≈ 10 billion instructions)
-        if let Some(cpu_cores) = cpu_limit {
-            let fuel = (cpu_cores * 10_000_000_000.0) as u64;
+        // Only set fuel when there's an actual CPU limit (don't use u64::MAX)
+        if let Some(millicores) = cpu_limit_millicores {
+            // Calculate initial fuel allocation using time slices
+            // Convert millicores to instructions per time slice
+            // Formula: (millicores / 1000) * FUEL_TIME_SLICE_INSTRUCTIONS / INSTRUCTIONS_PER_FUEL_UNIT
+            use crate::wasistate::{FUEL_TIME_SLICE_INSTRUCTIONS, INSTRUCTIONS_PER_FUEL_UNIT};
+
+            let instructions_per_slice = millicores
+                .saturating_mul(FUEL_TIME_SLICE_INSTRUCTIONS)
+                .saturating_div(1000);
+            let fuel = instructions_per_slice.saturating_div(INSTRUCTIONS_PER_FUEL_UNIT);
+
+            // Set initial fuel allocation (will be topped up on out-of-fuel via callback)
             store.set_fuel(fuel)?;
-        } else {
-            // Set unlimited fuel when no CPU limit is configured
-            store.set_fuel(u64::MAX)?;
+
+            // TODO: Implement fuel exhaustion callback for top-up mechanism
+            // store.out_of_fuel_async_yield(true); // For cooperative yielding
         }
+        // If no CPU limit, fuel consumption is still enabled but no fuel is set,
+        // allowing unlimited execution (wasmtime doesn't enforce fuel if none is set)
 
         let instance = component.instance_pre.instantiate_async(&mut store).await?;
 

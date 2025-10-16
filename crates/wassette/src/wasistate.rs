@@ -140,6 +140,15 @@ pub struct NetworkPermissions {
     pub allow_ip_name_lookup: bool,
 }
 
+/// Calibratable constant for fuel-to-instruction conversion
+/// This can be adjusted based on hardware characteristics and benchmarking
+/// Default: 1 million instructions per fuel unit
+pub const INSTRUCTIONS_PER_FUEL_UNIT: u64 = 1_000_000;
+
+/// Time slice for fuel allocation in instructions
+/// Allocate fuel in smaller chunks rather than all at once
+pub const FUEL_TIME_SLICE_INSTRUCTIONS: u64 = 100_000_000; // 100 million instructions per slice
+
 /// A template for the wasi state
 /// this includes the wasmtime_wasi, wasmtime_wasi_config and wasmtime_wasi_http states
 #[derive(Clone)]
@@ -162,8 +171,8 @@ pub struct WasiStateTemplate {
     pub memory_limit: Option<u64>,
     /// Store limits for wasmtime (built from memory_limit)
     pub store_limits: Option<wasmtime::StoreLimits>,
-    /// CPU limit in cores for the component
-    pub cpu_limit: Option<f64>,
+    /// CPU limit in millicores for the component (e.g., 500 = 0.5 cores)
+    pub cpu_limit_millicores: Option<u64>,
 }
 
 impl Default for WasiStateTemplate {
@@ -178,7 +187,7 @@ impl Default for WasiStateTemplate {
             allowed_hosts: HashSet::new(),
             memory_limit: None,
             store_limits: None,
-            cpu_limit: None,
+            cpu_limit_millicores: None,
         }
     }
 }
@@ -213,7 +222,7 @@ pub fn create_wasi_state_template_from_policy(
         preopened_dirs,
         allowed_hosts,
         memory_limit,
-        cpu_limit,
+        cpu_limit_millicores: cpu_limit,
         store_limits,
         ..Default::default()
     })
@@ -356,19 +365,21 @@ pub(crate) fn extract_memory_limit(policy: &PolicyDocument) -> anyhow::Result<Op
     Ok(None)
 }
 
-/// Extract CPU limit from the policy document
-pub(crate) fn extract_cpu_limit(policy: &PolicyDocument) -> anyhow::Result<Option<f64>> {
+/// Extract CPU limit from the policy document in millicores
+pub(crate) fn extract_cpu_limit(policy: &PolicyDocument) -> anyhow::Result<Option<u64>> {
     if let Some(resources) = &policy.permissions.resources {
         // Check the new k8s-style limits first
         if let Some(limits) = &resources.limits {
             if let Some(cpu_limit) = &limits.cpu {
-                return Ok(Some(cpu_limit.to_cores()?));
+                return Ok(Some(cpu_limit.to_millicores()?));
             }
         }
 
         // Fall back to legacy cpu field for backward compatibility
         if let Some(legacy_cpu) = resources.cpu {
-            return Ok(Some(legacy_cpu));
+            // Legacy values are in cores (floating point), convert to millicores
+            let millicores = (legacy_cpu * 1000.0) as u64;
+            return Ok(Some(millicores));
         }
     }
 
@@ -779,7 +790,7 @@ permissions:
 "#;
         let policy = PolicyParser::parse_str(yaml_content).unwrap();
         let cpu_limit = extract_cpu_limit(&policy).unwrap();
-        assert_eq!(cpu_limit, Some(0.5));
+        assert_eq!(cpu_limit, Some(500)); // 500 millicores
 
         // Test with k8s-style CPU limit in cores
         let yaml_content_cores = r#"
@@ -792,7 +803,7 @@ permissions:
 "#;
         let policy_cores = PolicyParser::parse_str(yaml_content_cores).unwrap();
         let cpu_limit_cores = extract_cpu_limit(&policy_cores).unwrap();
-        assert_eq!(cpu_limit_cores, Some(2.0));
+        assert_eq!(cpu_limit_cores, Some(2000)); // 2 cores = 2000 millicores
 
         // Test with legacy CPU limit
         let yaml_content_legacy = r#"
@@ -804,7 +815,7 @@ permissions:
 "#;
         let policy_legacy = PolicyParser::parse_str(yaml_content_legacy).unwrap();
         let cpu_limit_legacy = extract_cpu_limit(&policy_legacy).unwrap();
-        assert_eq!(cpu_limit_legacy, Some(1.5));
+        assert_eq!(cpu_limit_legacy, Some(1500)); // 1.5 cores = 1500 millicores
 
         // Test with no CPU limit
         let policy_no_cpu = create_zero_permission_policy();
@@ -852,7 +863,7 @@ permissions:
         let template =
             create_wasi_state_template_from_policy(&policy, plugin_dir, &env_vars, None).unwrap();
 
-        assert_eq!(template.cpu_limit, Some(0.5));
+        assert_eq!(template.cpu_limit_millicores, Some(500)); // 500 millicores
     }
 
     #[test]
@@ -874,7 +885,7 @@ permissions:
         let template =
             create_wasi_state_template_from_policy(&policy, plugin_dir, &env_vars, None).unwrap();
 
-        assert_eq!(template.cpu_limit, Some(2.0));
+        assert_eq!(template.cpu_limit_millicores, Some(2000)); // 2 cores = 2000 millicores
         assert_eq!(template.memory_limit, Some(1024 * 1024 * 1024));
         assert!(template.store_limits.is_some());
     }
