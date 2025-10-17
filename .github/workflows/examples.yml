@@ -43,6 +43,9 @@ jobs:
     - name: Install wit-docs-inject
       run: cargo install --git https://github.com/Mossaka/wit-docs-inject
 
+    - name: Install cargo-component
+      run: cargo install cargo-component
+
     - name: Build
       run: just build-examples
 
@@ -71,10 +74,16 @@ jobs:
             file: time-server-js.wasm
           - name: get-weather-js
             file: get-weather-js.wasm
+          - name: get-open-meteo-weather-js
+            file: get-open-meteo-weather-js.wasm
           - name: filesystem-rs
             file: filesystem.wasm
           - name: fetch-rs
             file: fetch-rs.wasm
+          - name: brave-search-rs
+            file: brave-search-rs.wasm
+          - name: context7-rs
+            file: context7.wasm
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0

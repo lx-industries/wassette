@@ -43,15 +43,21 @@ build-examples mode="debug":
     just ensure-wit-docs-inject
     (cd examples/fetch-rs && just build mode)
     (cd examples/filesystem-rs && just build mode)
+    (cd examples/brave-search-rs && just build mode)
+    (cd examples/context7-rs && just build mode)
     (cd examples/get-weather-js && just build)
+    (cd examples/get-open-meteo-weather-js && just build)
     (cd examples/time-server-js && just build)
     (cd examples/eval-py && just build)
     (cd examples/gomodule-go && just build)
     # Inject docs for Rust examples
     just inject-docs examples/fetch-rs/target/wasm32-wasip2/{{ mode }}/fetch_rs.wasm examples/fetch-rs/wit
     just inject-docs examples/filesystem-rs/target/wasm32-wasip2/{{ mode }}/filesystem.wasm examples/filesystem-rs/wit
+    just inject-docs examples/brave-search-rs/target/wasm32-wasip2/{{ mode }}/brave_search_rs.wasm examples/brave-search-rs/wit
+    just inject-docs examples/context7-rs/target/wasm32-wasip2/{{ mode }}/context7.wasm examples/context7-rs/wit
     # Inject docs for JS examples
     just inject-docs examples/get-weather-js/weather.wasm examples/get-weather-js/wit
+    just inject-docs examples/get-open-meteo-weather-js/weather.wasm examples/get-open-meteo-weather-js/wit
     just inject-docs examples/time-server-js/time.wasm examples/time-server-js/wit
     # Inject docs for Python examples
     just inject-docs examples/eval-py/eval.wasm examples/eval-py/wit
@@ -60,7 +66,10 @@ build-examples mode="debug":
     # Copy to bin directory
     cp examples/fetch-rs/target/wasm32-wasip2/{{ mode }}/fetch_rs.wasm bin/fetch-rs.wasm
     cp examples/filesystem-rs/target/wasm32-wasip2/{{ mode }}/filesystem.wasm bin/filesystem.wasm
+    cp examples/brave-search-rs/target/wasm32-wasip2/{{ mode }}/brave_search_rs.wasm bin/brave-search-rs.wasm
+    cp examples/context7-rs/target/wasm32-wasip2/{{ mode }}/context7.wasm bin/context7.wasm
     cp examples/get-weather-js/weather.wasm bin/get-weather-js.wasm
+    cp examples/get-open-meteo-weather-js/weather.wasm bin/get-open-meteo-weather-js.wasm
     cp examples/time-server-js/time.wasm bin/time-server-js.wasm
     cp examples/eval-py/eval.wasm bin/eval-py.wasm
     cp examples/gomodule-go/gomodule.wasm bin/gomodule.wasm
