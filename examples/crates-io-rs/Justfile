@@ -1,0 +1,5 @@
+build mode="debug":
+    cargo component build {{ if mode == "release" { "--release" } else { "" } }}
+
+build-auditable mode="debug":
+    cargo auditable component build {{ if mode == "release" { "--release" } else { "" } }}

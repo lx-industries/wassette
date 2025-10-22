@@ -1,0 +1,15 @@
+package component:crates-io-rs;
+
+/// An example world that demonstrates WASIp3 HTTP capabilities
+world crates-io {
+    /// Get information about a crate from crates.io
+    /// 
+    /// # Parameters
+    /// * `crate-name` - The name of the crate to look up
+    /// 
+    /// # Returns
+    /// A result containing either:
+    /// * Success: JSON string with crate information including name, description, latest version, and recent versions
+    /// * Error: String describing the error (network error, parsing error, etc.)
+    export get-crate-info: func(crate-name: string) -> result<string, string>;
+}

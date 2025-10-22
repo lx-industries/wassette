@@ -1,0 +1,6 @@
+version: "1.0"
+description: "Permission policy for crates-io-rs example in wassette"
+permissions:
+  network:
+    allow:
+      - host: "https://crates.io/"
