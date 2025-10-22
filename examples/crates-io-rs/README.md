@@ -4,11 +4,9 @@ This example demonstrates a Rust-based WebAssembly Component that uses HTTP capa
 
 For more information on installing Wassette, please see the [installation instructions](https://github.com/microsoft/wassette?tab=readme-ov-file#installation).
 
-## About WASIp3
+## Implementation
 
-This example is designed to work with WebAssembly components and demonstrates HTTP networking capabilities similar to those available in WASIp3 (WASI Preview 3). WASIp3 introduces improved async support and better HTTP primitives for WebAssembly components.
-
-While this example currently uses the stable `wasm32-wasip2` target with Spin SDK (which provides excellent HTTP support), it serves as a foundation for transitioning to native WASIp3 APIs when they become production-ready in Wasmtime v37+.
+This example uses the [Spin SDK](https://github.com/fermyon/spin) to provide HTTP client capabilities and async runtime support. The Spin SDK offers a mature, production-ready approach to building WebAssembly components with HTTP networking.
 
 ## Building
 
@@ -74,15 +72,18 @@ The component uses:
 
 The source code can be found in [`src/lib.rs`](src/lib.rs).
 
-## Future WASIp3 Support
+## About WASIp3
 
-When Wasmtime v37+ with production-ready WASIp3 support becomes available, this example can be updated to use native `wasi:http` interfaces. The WASIp3 specification includes:
+WASIp3 (WASI Preview 3) is an upcoming version of the WebAssembly System Interface that introduces native async support through the Component Model. As of Wasmtime v37, WASIp3 is available as an experimental preview with the `0.3.0-rc-2025-08-15` tag, but it is not yet production-ready.
 
-- `wasi:http/outgoing-handler@0.3.0` - For making HTTP requests
+The key innovation in WASIp3 is its native async primitives, which allow WebAssembly components to perform non-blocking I/O operations at the component model level. This differs from the approach used in this example, which relies on Spin SDK's async runtime.
+
+When WASIp3 becomes production-ready in future Wasmtime releases, components can be migrated to use:
+- `wasi:http/outgoing-handler@0.3.0` - For making async HTTP requests
 - `wasi:cli/environment@0.3.0` - For accessing environment variables
-- Improved async primitives for non-blocking I/O
+- Native async primitives defined in the Component Model
 
-To opt-in to WASIp3 features in Wasmtime v37+, use: `-Sp3 -Wcomponent-model-async`
+To experiment with WASIp3 features in Wasmtime v37+, use: `-Sp3 -Wcomponent-model-async`
 
 ## Example Output
 

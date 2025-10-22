@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- New Rust-based WebAssembly component example `crates-io-rs` that fetches crate information from crates.io API, demonstrating HTTP networking capabilities similar to WASIp3. The example includes comprehensive documentation about transitioning to native WASIp3 APIs when Wasmtime v37+ with production-ready WASIp3 support becomes available
+- New Rust-based WebAssembly component example `crates-io-rs` that fetches crate information from crates.io API using Spin SDK for HTTP client capabilities. The example demonstrates how to build components with HTTP networking and includes documentation about the upcoming WASIp3 specification and its native async primitives
 
 - Automated CHANGELOG synchronization with release pipeline: Release workflow extracts changelog content for release notes and automatically updates CHANGELOG.md post-release. Implemented using Python scripts with unit tests. The update-changelog job now checks that the release job succeeded before running.
 - Migration guide documentation for converting JavaScript-based MCP servers to Wassette WebAssembly components in the cookbook section, with step-by-step instructions, code examples, and a complete weather service migration walkthrough
