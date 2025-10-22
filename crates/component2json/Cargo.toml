@@ -2,17 +2,21 @@
 name = "component2json"
 version = "0.1.0"
 edition = "2021"
-description = "A library for converting WebAssembly Interface Types (WIT) to JSON Schema and back"
+description = "A library for converting WebAssembly Interface Types (WIT) to JSON Schema and back. Wasmtime integration is optional."
 license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-wasmtime = { workspace = true }
+wasmtime = { workspace = true, optional = true }
 wasmparser = "0.239"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+
+[features]
+default = ["wasmtime-integration"]
+wasmtime-integration = ["dep:wasmtime"]
 
 [dev-dependencies]
 wat = "1.240"
@@ -20,3 +24,4 @@ wat = "1.240"
 [[bin]]
 name = "component2json"
 path = "cmd/main.rs"
+required-features = ["wasmtime-integration"]

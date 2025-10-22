@@ -3,12 +3,41 @@
 
 #![doc = include_str!("../README.md")]
 
+//! ## Design Notes
+//!
+//! This crate uses Wasmtime for component introspection and type system representation, but **not**
+//! for component execution. The Wasmtime dependency is used solely for:
+//!
+//! 1. **Component Inspection**: Reading component exports and function signatures via `Component` and `Engine`
+//! 2. **Type System**: Representing WIT types through `wasmtime::component::Type`
+//! 3. **Value Representation**: Representing WIT values through `wasmtime::component::Val`
+//!
+//! The Wasmtime integration is made optional through the `wasmtime-integration` feature (enabled by default).
+//! This allows users who only need the runtime-agnostic utilities (like `extract_package_docs`,
+//! `validate_tool_name`, `normalize_tool_name`) to avoid the Wasmtime dependency.
+//!
+//! ### Future Improvements
+//!
+//! In the future, the Wasmtime dependency could potentially be replaced with:
+//! - Direct use of `wasmparser` for component metadata inspection
+//! - A custom intermediate representation for WIT types and values
+//!
+//! However, this would require significant refactoring and would duplicate functionality that
+//! Wasmtime already provides. The current approach balances practical utility with minimal complexity.
+
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::Value;
 use thiserror::Error;
 use wasmparser::{Parser, Payload};
+
+#[cfg(feature = "wasmtime-integration")]
+use serde_json::{json, Map};
+
+#[cfg(feature = "wasmtime-integration")]
 use wasmtime::component::types::{ComponentFunc, ComponentItem};
+#[cfg(feature = "wasmtime-integration")]
 use wasmtime::component::{Component, Type, Val};
+#[cfg(feature = "wasmtime-integration")]
 use wasmtime::Engine;
 
 /// Function identifier for tools, containing WIT package, WIT interface, and function names.
@@ -124,6 +153,7 @@ pub fn normalize_tool_name(identifier: &FunctionIdentifier) -> String {
 /// Given a component and a wasmtime engine, return structured tool metadata with normalized names.
 ///
 /// The `output` parameter determines whether to include the output schema for functions.
+#[cfg(feature = "wasmtime-integration")]
 pub fn component_exports_to_tools(
     component: &Component,
     engine: &Engine,
@@ -149,6 +179,7 @@ pub fn component_exports_to_tools(
 /// Given a component and a wasmtime engine, return a full JSON schema of the component's exports.
 ///
 /// The `output` parameter determines whether to include the output schema for functions.
+#[cfg(feature = "wasmtime-integration")]
 pub fn component_exports_to_json_schema(
     component: &Component,
     engine: &Engine,
@@ -187,6 +218,7 @@ pub fn extract_package_docs(wasm_bytes: &[u8]) -> Option<Value> {
 ///
 /// Searches through all worlds in the package-docs structure to find documentation
 /// for the given function name. Returns the documentation string if found.
+#[cfg(feature = "wasmtime-integration")]
 fn find_function_docs(package_docs: &Value, function_name: &str) -> Option<String> {
     let worlds = package_docs.get("worlds")?.as_object()?;
 
@@ -209,6 +241,7 @@ fn find_function_docs(package_docs: &Value, function_name: &str) -> Option<Strin
 ///
 /// The `output` parameter determines whether to include the output schema for functions.
 /// The `package_docs` parameter should be obtained via `extract_package_docs`.
+#[cfg(feature = "wasmtime-integration")]
 pub fn component_exports_to_tools_with_docs(
     component: &Component,
     engine: &Engine,
@@ -241,6 +274,7 @@ pub fn component_exports_to_tools_with_docs(
 ///
 /// The `output` parameter determines whether to include the output schema for functions.
 /// The `package_docs` parameter should be obtained via `extract_package_docs`.
+#[cfg(feature = "wasmtime-integration")]
 pub fn component_exports_to_json_schema_with_docs(
     component: &Component,
     engine: &Engine,
@@ -252,6 +286,7 @@ pub fn component_exports_to_json_schema_with_docs(
 }
 
 /// Converts a slice of component model [`Val`] objects into a JSON representation.
+#[cfg(feature = "wasmtime-integration")]
 pub fn vals_to_json(vals: &[Val]) -> Value {
     match vals.len() {
         0 => Value::Null,
@@ -275,6 +310,7 @@ pub fn vals_to_json(vals: &[Val]) -> Value {
 
 /// Converts a JSON object to a vector of `Val` objects based on the provided type mappings for each
 /// field.
+#[cfg(feature = "wasmtime-integration")]
 pub fn json_to_vals(value: &Value, types: &[(String, Type)]) -> Result<Vec<Val>, ValError> {
     match value {
         Value::Object(obj) => {
@@ -296,10 +332,12 @@ pub fn json_to_vals(value: &Value, types: &[(String, Type)]) -> Result<Vec<Val>,
 
 /// Prepares a placeholder `Vec<Val>` to receive the results of a component function call.
 /// The vector will have the correct length and correctly-typed (but empty/zeroed) values.
+#[cfg(feature = "wasmtime-integration")]
 pub fn create_placeholder_results(results: &[Type]) -> Vec<Val> {
     results.iter().map(default_val_for_type).collect()
 }
 
+#[cfg(feature = "wasmtime-integration")]
 fn type_to_json_schema(t: &Type) -> Value {
     match t {
         Type::Bool => json!({ "type": "boolean" }),
@@ -471,6 +509,7 @@ fn type_to_json_schema(t: &Type) -> Value {
     }
 }
 
+#[cfg(feature = "wasmtime-integration")]
 fn component_func_to_schema_with_docs(
     name: &str,
     func: &ComponentFunc,
@@ -515,6 +554,7 @@ fn component_func_to_schema_with_docs(
     json!(tool_obj)
 }
 
+#[cfg(feature = "wasmtime-integration")]
 fn canonical_output_schema_for_results(results: &[Type]) -> Option<Value> {
     if results.is_empty() {
         return None;
@@ -542,6 +582,7 @@ fn canonical_output_schema_for_results(results: &[Type]) -> Option<Value> {
     Some(build_result_wrapper(result_schema))
 }
 
+#[cfg(feature = "wasmtime-integration")]
 fn build_result_wrapper(result_schema: Value) -> Value {
     let mut props = Map::new();
     props.insert("result".to_string(), result_schema);
@@ -556,12 +597,14 @@ fn build_result_wrapper(result_schema: Value) -> Value {
     Value::Object(wrapper)
 }
 
+#[cfg(feature = "wasmtime-integration")]
 struct GatherMetadataContext<'a> {
     engine: &'a Engine,
     output: bool,
     package_docs: Option<&'a Value>,
 }
 
+#[cfg(feature = "wasmtime-integration")]
 fn gather_exported_functions_with_metadata(
     export_name: &str,
     previous_name: Option<String>,
@@ -586,6 +629,7 @@ fn gather_exported_functions_with_metadata(
     );
 }
 
+#[cfg(feature = "wasmtime-integration")]
 fn gather_exported_functions_with_metadata_internal(
     export_name: &str,
     previous_name: Option<String>,
@@ -650,6 +694,7 @@ fn gather_exported_functions_with_metadata_internal(
     }
 }
 
+#[cfg(feature = "wasmtime-integration")]
 fn val_to_json(val: &Val) -> Value {
     match val {
         Val::Bool(b) => Value::Bool(*b),
@@ -724,6 +769,7 @@ fn val_to_json(val: &Val) -> Value {
     }
 }
 
+#[cfg(feature = "wasmtime-integration")]
 fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
     match ty {
         Type::Bool => match value {
@@ -951,6 +997,7 @@ fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
     }
 }
 
+#[cfg(feature = "wasmtime-integration")]
 fn default_val_for_type(ty: &Type) -> Val {
     match ty {
         Type::Bool => Val::Bool(false),
@@ -1011,7 +1058,7 @@ fn default_val_for_type(ty: &Type) -> Val {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "wasmtime-integration"))]
 mod tests {
     use serde_json::json;
     use wasmtime::component::{Type, Val};

@@ -2,12 +2,31 @@
 
 A Rust library for converting WebAssembly Components to JSON Schema and handling WebAssembly Interface Type (WIT) value conversions.
 
+## Features
+
+- **`wasmtime-integration`** (enabled by default): Provides integration with the Wasmtime runtime for component introspection and type conversions. When disabled, only the runtime-agnostic functions are available (e.g., `extract_package_docs`, `validate_tool_name`, `normalize_tool_name`).
+
+To use this crate without Wasmtime:
+
+```toml
+[dependencies]
+component2json = { version = "*", default-features = false }
+```
+
+Note: Component inspection and type conversion functions require the `wasmtime-integration` feature.
+
 ## Usage
 
+This example requires the `wasmtime-integration` feature (enabled by default):
+
 ```rust
+# #[cfg(feature = "wasmtime-integration")]
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
+# #[cfg(feature = "wasmtime-integration")]
 use component2json::{component_exports_to_json_schema, json_to_vals, vals_to_json, create_placeholder_results};
+# #[cfg(feature = "wasmtime-integration")]
 use wasmtime::component::{Component, Type, Val};
+# #[cfg(feature = "wasmtime-integration")]
 use wasmtime::Engine;
 
 // Create a WebAssembly engine with component model enabled
@@ -46,6 +65,8 @@ let result_types = vec![Type::String, Type::U32];
 let placeholder_results = create_placeholder_results(&result_types);
 # Ok(())
 # }
+# #[cfg(not(feature = "wasmtime-integration"))]
+# fn main() {}
 ```
 
 ## Structured Result Wrapper
