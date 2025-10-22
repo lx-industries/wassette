@@ -50,10 +50,12 @@ build-examples mode="debug":
     (cd examples/brave-search-rs && just build {{ mode }})
     (cd examples/context7-rs && just build {{ mode }})
     (cd examples/get-open-meteo-weather-js && just build)
+    (cd examples/crates-io-rs && just build {{ mode }})
     # Inject docs for Rust examples
     just inject-docs examples/fetch-rs/target/wasm32-wasip2/{{ mode }}/fetch_rs.wasm examples/fetch-rs/wit
     just inject-docs examples/filesystem-rs/target/wasm32-wasip2/{{ mode }}/filesystem.wasm examples/filesystem-rs/wit
     just inject-docs examples/brave-search-rs/target/wasm32-wasip2/{{ mode }}/brave_search_rs.wasm examples/brave-search-rs/wit
+    just inject-docs examples/crates-io-rs/target/wasm32-wasip1/{{ mode }}/crates_io_rs.wasm examples/crates-io-rs/wit
     # Note: Skipping doc injection for context7-rs due to missing WIT dependencies (wasi:http@0.2.1)
     # Inject docs for JS examples
     just inject-docs examples/get-weather-js/weather.wasm examples/get-weather-js/wit
@@ -73,6 +75,7 @@ build-examples mode="debug":
     cp examples/brave-search-rs/target/wasm32-wasip2/{{ mode }}/brave_search_rs.wasm bin/brave-search-rs.wasm
     cp examples/context7-rs/target/wasm32-wasip2/{{ mode }}/context7.wasm bin/context7-rs.wasm
     cp examples/get-open-meteo-weather-js/weather.wasm bin/get-open-meteo-weather-js.wasm
+    cp examples/crates-io-rs/target/wasm32-wasip1/{{ mode }}/crates_io_rs.wasm bin/crates-io-rs.wasm
     
 clean:
     cargo clean
@@ -96,6 +99,9 @@ run-get-weather RUST_LOG='info':
 
 run-fetch-rs RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --plugin-dir ./examples/fetch-rs
+
+run-crates-io-rs RUST_LOG='info':
+    RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --plugin-dir ./examples/crates-io-rs
 
 # Documentation commands
 docs-build:
