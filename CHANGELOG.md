@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Fixed Mermaid sequence diagram rendering in documentation by adding mdbook-mermaid preprocessor configuration
 - Copyright check script now skips auto-generated `bindings.rs` files containing wit-bindgen markers, preventing incorrect license header additions to generated code while still checking custom bindings.rs files
 - Made dependabot automerge workflow non-blocking by adding `continue-on-error: true` to the auto-merge step, preventing workflow failures from blocking PRs when automerge cannot be enabled
+- Tool name normalization now prevents collisions by using unique replacement sequences for different delimiter characters. Previously, `example:foo`, `example/foo`, and `example.foo` would all normalize to `example_foo`. Now they normalize to distinct names: `example-c-foo`, `example-s-foo`, and `example-d-foo` respectively ([#57](https://github.com/microsoft/wassette/issues/57))
 
 ## [v0.3.0] - 2025-10-03
 

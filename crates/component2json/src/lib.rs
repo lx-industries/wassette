@@ -95,11 +95,11 @@ fn normalize_name_component(name: &str) -> String {
     name.to_lowercase()
         .chars()
         .flat_map(|c| match c {
-            ':' => vec!['-', 'c', '-'],  // colon → -c-
-            '/' => vec!['-', 's', '-'],  // slash → -s-
-            '.' => vec!['-', 'd', '-'],  // dot → -d-
+            ':' => vec!['-', 'c', '-'], // colon → -c-
+            '/' => vec!['-', 's', '-'], // slash → -s-
+            '.' => vec!['-', 'd', '-'], // dot → -d-
             c if c.is_ascii_alphanumeric() || c == '-' => vec![c],
-            _ => vec!['_'],  // other invalid chars → _
+            _ => vec!['_'], // other invalid chars → _
         })
         .collect()
 }
@@ -1023,7 +1023,7 @@ mod tests {
 
     use super::*;
 
-    fn result_schema<'a>(schema: &'a Value) -> &'a Value {
+    fn result_schema(schema: &Value) -> &Value {
         schema
             .get("properties")
             .and_then(|props| props.get("result"))
@@ -1331,7 +1331,10 @@ mod tests {
         assert_eq!(tools.len(), 1);
 
         let generate_tool = &tools[0];
-        assert_eq!(generate_tool.get("name").unwrap(), "foo-c-foo-s-foo_generate");  // "foo:foo/foo" → "foo-c-foo-s-foo"
+        assert_eq!(
+            generate_tool.get("name").unwrap(),
+            "foo-c-foo-s-foo_generate"
+        ); // "foo:foo/foo" → "foo-c-foo-s-foo"
 
         let input_schema = generate_tool.get("inputSchema").unwrap();
         let properties = input_schema.get("properties").unwrap().as_object().unwrap();
@@ -1959,14 +1962,14 @@ mod tests {
         assert_eq!(normalize_name_component("get-weather"), "get-weather");
         assert_eq!(
             normalize_name_component("local:time-server"),
-            "local-c-time-server"  // colon → -c-
+            "local-c-time-server" // colon → -c-
         );
-        assert_eq!(normalize_name_component("wasi:http"), "wasi-c-http");  // colon → -c-
+        assert_eq!(normalize_name_component("wasi:http"), "wasi-c-http"); // colon → -c-
         assert_eq!(
             normalize_name_component("time.get-current-time"),
-            "time-d-get-current-time"  // dot → -d-
+            "time-d-get-current-time" // dot → -d-
         );
-        assert_eq!(normalize_name_component("example/path"), "example-s-path");  // slash → -s-
+        assert_eq!(normalize_name_component("example/path"), "example-s-path"); // slash → -s-
         assert_eq!(normalize_name_component("UPPERCASE"), "uppercase");
         assert_eq!(normalize_name_component("Mixed-CASE"), "mixed-case");
         assert_eq!(
@@ -1984,7 +1987,7 @@ mod tests {
                     interface_name: Some("time".to_string()),
                     function_name: "get-current-time".to_string(),
                 },
-                "local-c-time-server_time_get-current-time",  // colon → -c-
+                "local-c-time-server_time_get-current-time", // colon → -c-
             ),
             (
                 FunctionIdentifier {
@@ -2000,7 +2003,7 @@ mod tests {
                     interface_name: Some("types".to_string()),
                     function_name: "request".to_string(),
                 },
-                "wasi-c-http_types_request",  // colon → -c-
+                "wasi-c-http_types_request", // colon → -c-
             ),
             (
                 FunctionIdentifier {
@@ -2008,7 +2011,7 @@ mod tests {
                     interface_name: None,
                     function_name: "function.name".to_string(),
                 },
-                "example-c-package_function-d-name",  // colon → -c-, dot → -d-
+                "example-c-package_function-d-name", // colon → -c-, dot → -d-
             ),
             (
                 FunctionIdentifier {
@@ -2016,7 +2019,7 @@ mod tests {
                     interface_name: Some("interface/name".to_string()),
                     function_name: "func-name".to_string(),
                 },
-                "interface-s-name_func-name",  // slash → -s-
+                "interface-s-name_func-name", // slash → -s-
             ),
         ];
 
@@ -2066,7 +2069,7 @@ mod tests {
         };
         let normalized1 = normalize_tool_name(&id1);
         let normalized2 = normalize_tool_name(&id2);
-        
+
         // These should NOT collide - different separators should result in different normalized names
         assert_ne!(
             normalized1, normalized2,
@@ -2081,7 +2084,7 @@ mod tests {
             function_name: "bar".to_string(),
         };
         let normalized3 = normalize_tool_name(&id3);
-        
+
         assert_ne!(
             normalized1, normalized3,
             "Collision detected: '{}' and '{}' both normalize to '{}'",
@@ -2106,7 +2109,7 @@ mod tests {
         };
         let normalized4 = normalize_tool_name(&id4);
         let normalized5 = normalize_tool_name(&id5);
-        
+
         assert_ne!(
             normalized4, normalized5,
             "Collision detected: 'pkg/interface:name.func' and 'pkg/interface/name.func' both normalize to '{}'",
@@ -2118,9 +2121,9 @@ mod tests {
     fn test_mcp_compliance() {
         // Test names from the design document examples (updated for new normalization)
         let test_names = vec![
-            "local-c-time-server_time_get-current-time",  // Updated with -c- for colon
+            "local-c-time-server_time_get-current-time", // Updated with -c- for colon
             "get-weather",
-            "wasi-c-http_types_request",  // Updated with -c- for colon
+            "wasi-c-http_types_request", // Updated with -c- for colon
         ];
 
         for tool_name in test_names {
