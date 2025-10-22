@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Refactored duplicated tool name string constants in `src/main.rs` by introducing centralized `const` definitions, eliminating duplication between `TryFrom` and `AsRef` implementations
 - Updated publish examples workflow to include new examples: brave-search-rs, context7-rs, and get-open-meteo-weather-js
 - Streamlined README.md by removing detailed sections on "Built-in Tools", "Building WebAssembly Components", "Community Components", and "Documentation" in favor of linking to comprehensive documentation pages
 - Removed duplicate built-in tools listing from `docs/design/permission-system.md` and replaced with reference link to `docs/reference/built-in-tools.md` ([#379](https://github.com/microsoft/wassette/pull/379))
