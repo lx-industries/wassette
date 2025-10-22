@@ -27,12 +27,10 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use thiserror::Error;
-use wasmparser::{Parser, Payload};
-
 #[cfg(feature = "wasmtime-integration")]
 use serde_json::{json, Map};
-
+use thiserror::Error;
+use wasmparser::{Parser, Payload};
 #[cfg(feature = "wasmtime-integration")]
 use wasmtime::component::types::{ComponentFunc, ComponentItem};
 #[cfg(feature = "wasmtime-integration")]
