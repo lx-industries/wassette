@@ -81,6 +81,8 @@ jobs:
             file: context7-rs.wasm
           - name: get-open-meteo-weather-js
             file: get-open-meteo-weather-js.wasm
+          - name: crates-io-rs
+            file: crates-io-rs.wasm
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
