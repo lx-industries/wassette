@@ -87,14 +87,19 @@ pub fn validate_tool_name(tool_name: &str) -> Result<(), ValidationError> {
     Ok(())
 }
 
-/// Normalizes a tool name component by replacing invalid characters with underscores
+/// Normalizes a tool name component by replacing invalid characters with unique sequences
+/// to prevent collisions. Different delimiter types are mapped to different replacement
+/// sequences to ensure that `example:foo`, `example/foo`, and `example.foo` result in
+/// distinct normalized names.
 fn normalize_name_component(name: &str) -> String {
     name.to_lowercase()
         .chars()
-        .map(|c| match c {
-            ':' | '/' | '.' => '_',
-            c if c.is_ascii_alphanumeric() || c == '-' => c,
-            _ => '_',
+        .flat_map(|c| match c {
+            ':' => vec!['-', 'c', '-'],  // colon → -c-
+            '/' => vec!['-', 's', '-'],  // slash → -s-
+            '.' => vec!['-', 'd', '-'],  // dot → -d-
+            c if c.is_ascii_alphanumeric() || c == '-' => vec![c],
+            _ => vec!['_'],  // other invalid chars → _
         })
         .collect()
 }
@@ -1326,7 +1331,7 @@ mod tests {
         assert_eq!(tools.len(), 1);
 
         let generate_tool = &tools[0];
-        assert_eq!(generate_tool.get("name").unwrap(), "foo_foo_foo_generate");
+        assert_eq!(generate_tool.get("name").unwrap(), "foo-c-foo-s-foo_generate");  // "foo:foo/foo" → "foo-c-foo-s-foo"
 
         let input_schema = generate_tool.get("inputSchema").unwrap();
         let properties = input_schema.get("properties").unwrap().as_object().unwrap();
@@ -1954,14 +1959,14 @@ mod tests {
         assert_eq!(normalize_name_component("get-weather"), "get-weather");
         assert_eq!(
             normalize_name_component("local:time-server"),
-            "local_time-server"
+            "local-c-time-server"  // colon → -c-
         );
-        assert_eq!(normalize_name_component("wasi:http"), "wasi_http");
+        assert_eq!(normalize_name_component("wasi:http"), "wasi-c-http");  // colon → -c-
         assert_eq!(
             normalize_name_component("time.get-current-time"),
-            "time_get-current-time"
+            "time-d-get-current-time"  // dot → -d-
         );
-        assert_eq!(normalize_name_component("example/path"), "example_path");
+        assert_eq!(normalize_name_component("example/path"), "example-s-path");  // slash → -s-
         assert_eq!(normalize_name_component("UPPERCASE"), "uppercase");
         assert_eq!(normalize_name_component("Mixed-CASE"), "mixed-case");
         assert_eq!(
@@ -1979,7 +1984,7 @@ mod tests {
                     interface_name: Some("time".to_string()),
                     function_name: "get-current-time".to_string(),
                 },
-                "local_time-server_time_get-current-time",
+                "local-c-time-server_time_get-current-time",  // colon → -c-
             ),
             (
                 FunctionIdentifier {
@@ -1995,7 +2000,7 @@ mod tests {
                     interface_name: Some("types".to_string()),
                     function_name: "request".to_string(),
                 },
-                "wasi_http_types_request",
+                "wasi-c-http_types_request",  // colon → -c-
             ),
             (
                 FunctionIdentifier {
@@ -2003,7 +2008,7 @@ mod tests {
                     interface_name: None,
                     function_name: "function.name".to_string(),
                 },
-                "example_package_function_name",
+                "example-c-package_function-d-name",  // colon → -c-, dot → -d-
             ),
             (
                 FunctionIdentifier {
@@ -2011,7 +2016,7 @@ mod tests {
                     interface_name: Some("interface/name".to_string()),
                     function_name: "func-name".to_string(),
                 },
-                "interface_name_func-name",
+                "interface-s-name_func-name",  // slash → -s-
             ),
         ];
 
@@ -2047,12 +2052,75 @@ mod tests {
     }
 
     #[test]
+    fn test_normalize_tool_name_collision_detection() {
+        // Test case 1: colon vs slash collision
+        let id1 = FunctionIdentifier {
+            package_name: Some("example:foo".to_string()),
+            interface_name: None,
+            function_name: "bar".to_string(),
+        };
+        let id2 = FunctionIdentifier {
+            package_name: Some("example/foo".to_string()),
+            interface_name: None,
+            function_name: "bar".to_string(),
+        };
+        let normalized1 = normalize_tool_name(&id1);
+        let normalized2 = normalize_tool_name(&id2);
+        
+        // These should NOT collide - different separators should result in different normalized names
+        assert_ne!(
+            normalized1, normalized2,
+            "Collision detected: '{}' and '{}' both normalize to '{}'",
+            "example:foo/bar", "example/foo/bar", normalized1
+        );
+
+        // Test case 2: dot vs slash collision
+        let id3 = FunctionIdentifier {
+            package_name: Some("example.foo".to_string()),
+            interface_name: None,
+            function_name: "bar".to_string(),
+        };
+        let normalized3 = normalize_tool_name(&id3);
+        
+        assert_ne!(
+            normalized1, normalized3,
+            "Collision detected: '{}' and '{}' both normalize to '{}'",
+            "example:foo/bar", "example.foo/bar", normalized1
+        );
+        assert_ne!(
+            normalized2, normalized3,
+            "Collision detected: '{}' and '{}' both normalize to '{}'",
+            "example/foo/bar", "example.foo/bar", normalized2
+        );
+
+        // Test case 3: interface-level collision
+        let id4 = FunctionIdentifier {
+            package_name: Some("pkg".to_string()),
+            interface_name: Some("interface:name".to_string()),
+            function_name: "func".to_string(),
+        };
+        let id5 = FunctionIdentifier {
+            package_name: Some("pkg".to_string()),
+            interface_name: Some("interface/name".to_string()),
+            function_name: "func".to_string(),
+        };
+        let normalized4 = normalize_tool_name(&id4);
+        let normalized5 = normalize_tool_name(&id5);
+        
+        assert_ne!(
+            normalized4, normalized5,
+            "Collision detected: 'pkg/interface:name.func' and 'pkg/interface/name.func' both normalize to '{}'",
+            normalized4
+        );
+    }
+
+    #[test]
     fn test_mcp_compliance() {
-        // Test names from the design document examples
+        // Test names from the design document examples (updated for new normalization)
         let test_names = vec![
-            "local_time-server_time_get-current-time",
+            "local-c-time-server_time_get-current-time",  // Updated with -c- for colon
             "get-weather",
-            "wasi_http_types_request",
+            "wasi-c-http_types_request",  // Updated with -c- for colon
         ];
 
         for tool_name in test_names {
@@ -2096,8 +2164,9 @@ mod tests {
 
         let tool = &tool_metadata[0];
 
-        // The tool name should be normalized from "foo:foo/foo.generate" to "foo_foo_foo_generate"
-        assert_eq!(tool.normalized_name, "foo_foo_foo_generate");
+        // The tool name should be normalized from "foo:foo/foo.generate" to "foo-c-foo-s-foo_generate"
+        // (colon → -c-, slash → -s-)
+        assert_eq!(tool.normalized_name, "foo-c-foo-s-foo_generate");
 
         // Verify it's MCP compliant
         assert!(validate_tool_name(&tool.normalized_name).is_ok());
@@ -2105,7 +2174,7 @@ mod tests {
         // The schema should have the normalized name
         assert_eq!(
             tool.schema["name"].as_str().unwrap(),
-            "foo_foo_foo_generate"
+            "foo-c-foo-s-foo_generate"
         );
 
         // The function identifier should preserve the original structure
