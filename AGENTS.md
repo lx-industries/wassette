@@ -39,6 +39,32 @@ just build-examples
 just clean
 ```
 
+### Managing Examples
+
+**IMPORTANT**: When adding or removing examples in the `examples/` directory, you **MUST** update the `component-registry.json` file to keep it synchronized.
+
+The `component-registry.json` file contains a registry of all available example components with their names, descriptions, and OCI URIs. This file is used for component discovery and documentation.
+
+**Steps when adding a new example:**
+1. Create the example directory under `examples/`
+2. Add an entry to `component-registry.json` with:
+   - `name`: Human-readable name of the component
+   - `description`: Brief description including the programming language
+   - `uri`: OCI registry URI in the format `oci://ghcr.io/microsoft/{example-name}:latest`
+
+**Steps when removing an example:**
+1. Remove the example directory from `examples/`
+2. Remove the corresponding entry from `component-registry.json`
+
+Example entry format:
+```json
+{
+    "name": "Example Component",
+    "description": "A description of the component written in Language",
+    "uri": "oci://ghcr.io/microsoft/example-name:latest"
+}
+```
+
 ### Running Tests
 
 ```bash
