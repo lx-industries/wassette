@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Scripts for version pinning GitHub Actions in agentic workflow `.lock.yml` files to enhance security by preventing unwanted or malicious updates to third-party actions through SHA-based references instead of tags
 - Added `just install` command for convenient local installation to ~/.local/bin
 - Configurable bind address for HTTP-based transports (SSE and StreamableHttp) via CLI flag `--bind-address`, environment variable `WASSETTE_BIND_ADDRESS`, or configuration file field `bind_address`. Default remains `127.0.0.1:9001` for backward compatibility
 - Cookbook tutorial for publishing Wasm components to OCI registries (GHCR) using `wkg` CLI tool and GitHub Actions, including local development workflow, automated CI/CD publishing, signing with Cosign, version management strategies, and troubleshooting guide
