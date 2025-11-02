@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Comprehensive documentation on wit-docs-inject usage for embedding WIT documentation into WASM components and translating it to AI agent tool descriptions ([#411](https://github.com/microsoft/wassette/pull/411))
 - Agentic workflow for automatic CHANGELOG PR link addition: When PRs modify CHANGELOG.md, the workflow automatically adds PR links to new entries in the Unreleased section, ensuring consistent formatting and making it easier to track changes back to their source PRs ([#442](https://github.com/microsoft/wassette/pull/442))
 - Release branch strategy to prevent development blockages: Release pipeline now creates and preserves dedicated release branches (e.g., `release/vX.Y.Z`) for the entire release process, ensuring that ongoing development on main is not blocked by release activities ([#474](https://github.com/microsoft/wassette/pull/474))
+- Sequential release pipeline for example components: Example components are now automatically published to GHCR with the same version tag after successful binary release, preventing partial release states. The release workflow triggers the examples workflow only after the binary release succeeds, and a manual workflow_dispatch option is available for recovery if the automated pipeline fails
 
 ### Changed
 
