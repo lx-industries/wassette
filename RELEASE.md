@@ -80,12 +80,15 @@ The release process is now largely automated through GitHub Actions workflows an
    - Builds binaries for all platforms (Linux, macOS, Windows; AMD64 and ARM64)
    - Extracts the changelog content for the version from `CHANGELOG.md`
    - Creates a GitHub release with all compiled binaries and the changelog content as release notes
+   - **Triggers the example components workflow** to publish all examples with the same version tag
    - Automatically updates `CHANGELOG.md` on the release branch:
      - Converts `[Unreleased]` section to the new version with release date
      - Adds a new empty `[Unreleased]` section
      - Updates version comparison links
    - Creates a PR to merge the release branch back to main with the updated CHANGELOG
    - Monitor the workflow progress in the [Actions tab](https://github.com/microsoft/wassette/actions)
+   
+   **Note:** Example components are published sequentially after the binary release succeeds. This ensures that if the binary release fails, example components are not published, avoiding partial release states.
 
 1. **Merge the CHANGELOG update PR**: After the release workflow completes, a new PR will be created to merge the release branch back to main with the updated CHANGELOG. Review and merge this PR.
 
@@ -145,11 +148,20 @@ If the automated workflows fail, you can follow the manual process:
 
 Example WebAssembly components are automatically published to the GitHub Container Registry (GHCR) as OCI artifacts. This allows users to load examples directly from `oci://ghcr.io/microsoft/<example-name>:latest`.
 
-### Automatic Publishing on Main Branch
+### Automatic Publishing During Release
 
-The [`examples.yml`](.github/workflows/examples.yml) workflow automatically publishes example components when:
-- Changes to files in the `examples/**` directory are pushed to the `main` branch
-- A pull request targeting the `main` branch modifies files in the `examples/**` directory (build only, no publish)
+**When a new version is released, example components are automatically published with the same version tag.** The [`examples.yml`](.github/workflows/examples.yml) workflow is triggered automatically after the binary release completes successfully:
+
+1. The `release.yml` workflow builds and publishes the Wassette binary
+2. After successful binary release, the `publish-examples` job triggers the `examples.yml` workflow
+3. Example components are built and published with the release version tag (e.g., `v0.4.0`)
+4. All components are also tagged as `latest`
+5. All published images are signed using Cosign
+
+This sequential approach ensures that:
+- The binary is released first, avoiding partial release states
+- Example components use the same version tag as the binary
+- If the binary release fails, example components are not published
 
 **Published examples include:**
 - `eval-py` - Python expression evaluator
@@ -159,23 +171,27 @@ The [`examples.yml`](.github/workflows/examples.yml) workflow automatically publ
 - `gomodule-go` - Go module information tool
 - `memory-js` - Knowledge graph memory server in JavaScript
 - `time-server-js` - Time server example in JavaScript
-
-**Additional examples in repository (not yet published to OCI registry):**
 - `brave-search-rs` - Web search using Brave Search API
 - `context7-rs` - Search libraries and fetch documentation via Context7 API
 - `get-open-meteo-weather-js` - Weather data via Open-Meteo API (no API key required)
 
-**What the workflow does:**
+### Automatic Publishing on Main Branch
+
+The [`examples.yml`](.github/workflows/examples.yml) workflow also automatically publishes example components when:
+- Changes to files in the `examples/**` directory are pushed to the `main` branch
+- A pull request targeting the `main` branch modifies files in the `examples/**` directory (build only, no publish)
+
+**What happens on main branch pushes:**
 1. Builds all example components using `just build-examples`
 2. Publishes each component to `ghcr.io/microsoft/<component-name>`
 3. Tags each component with both:
    - The commit SHA (e.g., `abc1234`)
-   - The `latest` tag for main branch pushes
+   - The `latest` tag
 4. Signs all published images using Cosign
 
 ### Manual Release of Example Components
 
-To manually publish examples with a specific version tag:
+If the automated release of example components fails, you can manually trigger the workflow with a specific version tag:
 
 1. **Navigate to the Actions tab**:
    - Go to [Publish Examples workflow](https://github.com/microsoft/wassette/actions/workflows/examples.yml)
@@ -183,13 +199,16 @@ To manually publish examples with a specific version tag:
 
 2. **Configure the workflow run**:
    - Select the branch (typically `main`)
-   - Enter a custom tag (e.g., `v0.4.0`) or leave as default `latest`
+   - Enter the version tag (e.g., `v0.4.0`) to match the binary release
    - Click "Run workflow"
 
 3. **Monitor the workflow**:
    - The workflow will build all examples
-   - Publish them to GHCR with both the commit SHA and your specified tag
+   - Publish them to GHCR with the specified version tag (e.g., `v0.4.0`)
+   - Also tag them as `latest` (for version tags only)
    - Sign all published images
+
+**Note:** When using a version tag (format `vX.Y.Z`), the workflow automatically publishes two tags: the version tag and `latest`. For other tag formats, only the specified tag is used.
 
 ### Using Published Examples
 

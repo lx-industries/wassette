@@ -9,12 +9,10 @@ on:
     branches: [ "main" ]
     paths:
       - 'examples/**'
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'The tag to use for the OCI artifacts.'
+        description: 'The tag to use for the OCI artifacts (e.g., v0.4.0 or latest)'
         required: true
         type: string
         default: 'latest'
@@ -104,17 +102,24 @@ jobs:
       - name: Determine tag
         id: meta
         run: |
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-            echo "tag=$VERSION" >> $GITHUB_OUTPUT
-            echo "latest=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "tag=$GITHUB_SHA" >> $GITHUB_OUTPUT
-            echo "latest=true" >> $GITHUB_OUTPUT
-            echo "release_tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # When manually triggered, use the provided tag
+            INPUT_TAG="${{ github.event.inputs.tag }}"
+            echo "tag=$INPUT_TAG" >> $GITHUB_OUTPUT
+            
+            # If the input tag is a version tag (starts with v), also tag as latest
+            if [[ "$INPUT_TAG" == v*.*.* ]]; then
+              echo "latest=true" >> $GITHUB_OUTPUT
+              echo "release_tag=latest" >> $GITHUB_OUTPUT
+            else
+              # For 'latest' or other tags, only use that tag
+              echo "latest=false" >> $GITHUB_OUTPUT
+            fi
           else
+            # For push events, use commit SHA and tag as latest
             echo "tag=$GITHUB_SHA" >> $GITHUB_OUTPUT
-            echo "latest=false" >> $GITHUB_OUTPUT
+            echo "latest=true" >> $GITHUB_OUTPUT
+            echo "release_tag=latest" >> $GITHUB_OUTPUT
           fi
       - name: Publish ${{ matrix.component.name }}
         id: publish_versioned
