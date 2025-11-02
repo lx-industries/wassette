@@ -107,7 +107,9 @@ jobs:
             INPUT_TAG="${{ github.event.inputs.tag }}"
             echo "tag=$INPUT_TAG" >> $GITHUB_OUTPUT
             
-            # If the input tag is a version tag (starts with v), also tag as latest
+            # If the input tag is a semantic version tag (vX.Y.Z format), also tag as latest
+            # Pattern matches: v0.4.0, v1.2.3, etc. (official releases only)
+            # Does not match prerelease versions like v1.0.0-alpha or v1.0.0-rc.1
             if [[ "$INPUT_TAG" == v*.*.* ]]; then
               echo "latest=true" >> $GITHUB_OUTPUT
               echo "release_tag=latest" >> $GITHUB_OUTPUT
