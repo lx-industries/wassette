@@ -12,3 +12,45 @@ instructions provided by the bot. You will only need to do this once across all 
 This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
 For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/)
 or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+
+## Development Setup
+
+### Git Hooks
+
+This repository includes pre-commit hooks to ensure code quality and consistency. To install the git hooks, run:
+
+```bash
+just install-git-hooks
+```
+
+Or directly:
+
+```bash
+./scripts/install-git-hooks.sh
+```
+
+The pre-commit hook will automatically run `cargo +nightly fmt --all -- --check` before each commit to ensure all Rust code is properly formatted. If the check fails, format your code with:
+
+```bash
+cargo +nightly fmt --all
+```
+
+Then stage the changes and commit again.
+
+### Code Formatting
+
+All Rust code must be formatted using `cargo +nightly fmt`. This is enforced by:
+- Pre-commit hooks (if installed)
+- CI/CD pipeline checks
+
+To format your code manually:
+
+```bash
+cargo +nightly fmt --all
+```
+
+To check formatting without modifying files:
+
+```bash
+cargo +nightly fmt --all -- --check
+```

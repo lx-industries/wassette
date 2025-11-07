@@ -1,3 +1,7 @@
+# Install git hooks (pre-commit, etc.) from .git-hooks/ to .git/hooks/
+install-git-hooks:
+    ./scripts/install-git-hooks.sh
+
 # Clean component target directories to avoid permission issues
 clean-test-components:
     rm -rf examples/fetch-rs/target/

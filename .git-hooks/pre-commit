@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Pre-commit hook to run cargo +nightly fmt
+# This ensures all Rust code is properly formatted before committing
+
+set -e
+
+echo "Running cargo +nightly fmt --all -- --check..."
+
+# Check if rustfmt is available in nightly toolchain
+if ! cargo +nightly fmt --version &> /dev/null; then
+    echo "Error: cargo +nightly fmt is not available."
+    echo "Please install it with: rustup toolchain install nightly --component rustfmt"
+    exit 1
+fi
+
+# Run cargo fmt in check mode
+if ! cargo +nightly fmt --all -- --check; then
+    echo ""
+    echo "❌ Code formatting check failed!"
+    echo ""
+    echo "Some files are not properly formatted."
+    echo "Please run the following command to format your code:"
+    echo ""
+    echo "    cargo +nightly fmt --all"
+    echo ""
+    echo "Then stage the changes and try committing again."
+    exit 1
+fi
+
+echo "✓ Code formatting check passed!"
+exit 0
