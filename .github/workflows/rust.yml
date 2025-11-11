@@ -134,7 +134,9 @@ jobs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v6.1.0
       with:
-        file: ./lcov.info
+        files: ./lcov.info
+        token: ${{ secrets.CODECOV_TOKEN }}
+        use_oidc: true
         fail_ci_if_error: false
     - name: Coverage summary
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v7.1.0
