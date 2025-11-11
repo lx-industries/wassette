@@ -94,11 +94,23 @@ impl CliTestContext {
     }
 
     /// Execute a wassette CLI command without --component-dir (for commands that don't need it)
+    #[allow(dead_code)]
     async fn run_command_no_component_dir(&self, args: &[&str]) -> Result<(String, String, i32)> {
+        self.run_command_no_component_dir_with_timeout(args, 120)
+            .await
+    }
+
+    /// Execute a wassette CLI command without --component-dir with a custom timeout
+    #[allow(dead_code)]
+    async fn run_command_no_component_dir_with_timeout(
+        &self,
+        args: &[&str],
+        timeout_secs: u64,
+    ) -> Result<(String, String, i32)> {
         let mut cmd = AsyncCommand::new(&self.wassette_bin);
         cmd.args(args);
 
-        let output = tokio::time::timeout(Duration::from_secs(120), cmd.output())
+        let output = tokio::time::timeout(Duration::from_secs(timeout_secs), cmd.output())
             .await
             .context("Command timed out")?
             .context("Failed to execute command")?;
@@ -694,10 +706,23 @@ async fn test_cli_inspect_component() -> Result<()> {
     let ctx = CliTestContext::new().await?;
     let component_path = build_fetch_component().await?;
 
-    // Run inspect command on the component
-    let (stdout, stderr, exit_code) = ctx
-        .run_command_no_component_dir(&["inspect", component_path.to_str().unwrap()])
-        .await?;
+    // First, load the component
+    let file_uri = format!("file://{}", component_path.display());
+    let (load_stdout, load_stderr, load_exit_code) =
+        ctx.run_command(&["component", "load", &file_uri]).await?;
+
+    assert_eq!(
+        load_exit_code, 0,
+        "Load command failed with stderr: {load_stderr}"
+    );
+
+    let load_output: Value = ctx.parse_json_output(&load_stdout)?;
+    let component_id = load_output["id"]
+        .as_str()
+        .expect("Component ID should be in load output");
+
+    // Now inspect the loaded component by ID
+    let (stdout, stderr, exit_code) = ctx.run_command(&["inspect", component_id]).await?;
 
     assert_eq!(exit_code, 0, "Inspect command failed with stderr: {stderr}");
 
@@ -719,18 +744,18 @@ async fn test_cli_inspect_component() -> Result<()> {
 }
 
 #[test(tokio::test)]
-async fn test_cli_inspect_invalid_path() -> Result<()> {
+async fn test_cli_inspect_invalid_component_id() -> Result<()> {
     let ctx = CliTestContext::new().await?;
 
-    // Try to inspect a non-existent file
+    // Try to inspect a non-existent component
     let (_, stderr, exit_code) = ctx
-        .run_command_no_component_dir(&["inspect", "/nonexistent/path.wasm"])
+        .run_command(&["inspect", "nonexistent-component"])
         .await?;
 
-    assert_ne!(exit_code, 0, "Command should fail for invalid path");
+    assert_ne!(exit_code, 0, "Command should fail for invalid component ID");
     assert!(
-        stderr.contains("Error") || stderr.contains("Failed"),
-        "Error message should indicate failure"
+        stderr.contains("not found") || stderr.contains("Error"),
+        "Error message should indicate component not found"
     );
 
     Ok(())

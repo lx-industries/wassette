@@ -1120,44 +1120,35 @@ async fn main() -> Result<()> {
                     }
                 }
             },
-            Commands::Inspect { path } => {
-                use std::sync::Arc;
+            Commands::Inspect {
+                component_id,
+                component_dir,
+            } => {
+                let component_dir = component_dir.clone().or_else(|| cli.component_dir.clone());
+                let lifecycle_manager = create_lifecycle_manager(component_dir).await?;
 
-                use wasmtime::component::Component;
-                use wasmtime::{Config, Engine};
-
-                // Configure Wasmtime engine for component model
-                let mut config = Config::new();
-                config.wasm_component_model(true);
-                config.async_support(true);
-                let engine = Arc::new(Engine::new(&config)?);
-
-                // Load the component
-                let component = Arc::new(Component::from_file(&engine, path)?);
-
-                // Try to extract package docs
-                let wasm_bytes = std::fs::read(path)?;
-                let package_docs = component2json::extract_package_docs(&wasm_bytes);
-
-                // Generate schema
-                let schema = if let Some(ref docs) = package_docs {
-                    println!("Found package docs!");
-                    component2json::component_exports_to_json_schema_with_docs(
-                        &component, &engine, true, docs,
-                    )
-                } else {
-                    println!("No package docs found, using auto-generated");
-                    component2json::component_exports_to_json_schema(&component, &engine, true)
-                };
+                // Get the component schema from the lifecycle manager
+                let schema = lifecycle_manager
+                    .get_component_schema(component_id)
+                    .await
+                    .context(format!(
+                    "Component '{}' not found. Use 'component load' to load the component first.",
+                    component_id
+                ))?;
 
                 // Display tools information
                 if let Some(arr) = schema["tools"].as_array() {
                     for t in arr {
-                        let name = t["name"].as_str().unwrap_or("<unnamed>").to_string();
+                        // The tool info is nested in properties.result
+                        let tool_info = &t["properties"]["result"];
+                        let name = tool_info["name"]
+                            .as_str()
+                            .unwrap_or("<unnamed>")
+                            .to_string();
                         let description: Option<String> =
-                            t["description"].as_str().map(|s| s.to_string());
-                        let input_schema = t["inputSchema"].clone();
-                        let output_schema = t["outputSchema"].clone();
+                            tool_info["description"].as_str().map(|s| s.to_string());
+                        let input_schema = tool_info["inputSchema"].clone();
+                        let output_schema = tool_info["outputSchema"].clone();
 
                         println!("{name}, {description:?}");
                         println!(

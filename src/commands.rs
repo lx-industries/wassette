@@ -51,8 +51,11 @@ pub enum Commands {
     },
     /// Inspect a WebAssembly component and display its JSON schema (for debugging).
     Inspect {
-        /// Path to the WebAssembly component file
-        path: PathBuf,
+        /// Component ID to inspect
+        component_id: String,
+        /// Directory where components are stored. Defaults to $XDG_DATA_HOME/wassette/components
+        #[arg(long)]
+        component_dir: Option<PathBuf>,
     },
     /// Manage tools (list, read, invoke).
     Tool {
