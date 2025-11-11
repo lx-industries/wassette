@@ -6,6 +6,7 @@
 #![warn(missing_docs)]
 
 use std::collections::HashMap;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -422,9 +423,16 @@ impl LifecycleManager {
     }
 
     async fn resolve_component_resource(&self, uri: &str) -> Result<(String, DownloadedResource)> {
-        let resource =
-            loader::load_resource::<ComponentResource>(uri, &self.oci_client, &self.http_client)
-                .await?;
+        // Show progress when running in CLI mode (stderr is a TTY)
+        let show_progress = std::io::stderr().is_terminal();
+
+        let resource = loader::load_resource_with_progress::<ComponentResource>(
+            uri,
+            &self.oci_client,
+            &self.http_client,
+            show_progress,
+        )
+        .await?;
         let id = resource.id()?;
         Ok((id, resource))
     }
