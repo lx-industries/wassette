@@ -316,7 +316,5 @@ async function fetch(url, options) {
     }
 }
 
-// Export the types interface according to the WIT interface
-export const types = {
-    fetch
-};
+// Export the fetch function directly according to the WIT world
+export { fetch };
