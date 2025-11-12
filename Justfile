@@ -59,6 +59,7 @@ build-examples mode="debug":
     mkdir -p bin
     just ensure-wit-docs-inject
     (cd examples/fetch-rs && just build {{ mode }})
+    (cd examples/fetch-es && just build)
     (cd examples/filesystem-rs && just build {{ mode }})
     (cd examples/get-weather-js && just build)
     (cd examples/time-server-js && just build)
@@ -76,6 +77,7 @@ build-examples mode="debug":
     just inject-docs examples/arxiv-rs/target/wasm32-wasip2/{{ mode }}/arxiv_rs.wasm examples/arxiv-rs/wit
     just inject-docs examples/context7-rs/target/wasm32-wasip2/{{ mode }}/context7.wasm examples/context7-rs/wit
     # Inject docs for JS examples
+    just inject-docs examples/fetch-es/fetch.wasm examples/fetch-es/wit
     just inject-docs examples/get-weather-js/weather.wasm examples/get-weather-js/wit
     just inject-docs examples/time-server-js/time.wasm examples/time-server-js/wit
     just inject-docs examples/memory-js/memory.wasm examples/memory-js/wit
@@ -86,6 +88,7 @@ build-examples mode="debug":
     just inject-docs examples/gomodule-go/gomodule.wasm examples/gomodule-go/wit
     # Copy to bin directory
     cp examples/fetch-rs/target/wasm32-wasip2/{{ mode }}/fetch_rs.wasm bin/fetch-rs.wasm
+    cp examples/fetch-es/fetch.wasm bin/fetch-es.wasm
     cp examples/filesystem-rs/target/wasm32-wasip2/{{ mode }}/filesystem.wasm bin/filesystem.wasm
     cp examples/get-weather-js/weather.wasm bin/get-weather-js.wasm
     cp examples/time-server-js/time.wasm bin/time-server-js.wasm
@@ -120,8 +123,12 @@ run-get-weather RUST_LOG='info':
 run-fetch-rs RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --component-dir ./examples/fetch-rs
 
+run-fetch-es RUST_LOG='info':
+    RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --component-dir ./examples/fetch-es
+
 run-memory RUST_LOG='info':
     RUST_LOG={{RUST_LOG}} cargo run --bin wassette serve --sse --component-dir ./examples/memory-js
+
 
 # Documentation commands
 docs-build:

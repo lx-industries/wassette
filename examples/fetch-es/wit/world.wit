@@ -1,0 +1,67 @@
+package component:fetch-es;
+
+interface types {
+    /// HTTP header as key-value pair
+    record header {
+        name: string,
+        value: string,
+    }
+
+    /// HTTP request options
+    record request-options {
+        /// HTTP method (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS)
+        method: string,
+        /// Request headers as key-value pairs
+        headers: option<list<header>>,
+        /// Request body (can be text or binary data)
+        body: option<string>,
+        /// Timeout in milliseconds (0 = no timeout)
+        timeout: option<u32>,
+        /// Maximum number of redirects to follow (0 = no redirects)
+        max-redirects: option<u32>,
+        /// Whether to retry on transient failures
+        retry: option<bool>,
+        /// Maximum number of retry attempts
+        max-retries: option<u32>,
+    }
+
+    /// HTTP response
+    record response {
+        /// HTTP status code
+        status: u16,
+        /// HTTP status text
+        status-text: string,
+        /// Response headers
+        headers: list<header>,
+        /// Response body (text or base64-encoded binary)
+        body: string,
+        /// Whether body is binary (base64-encoded)
+        is-binary: bool,
+        /// Content type from response headers
+        content-type: option<string>,
+        /// Character encoding detected or specified
+        charset: option<string>,
+    }
+
+    /// Fetch a resource from a URL with comprehensive options
+    /// 
+    /// Supports:
+    /// - Full HTTP method support (GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS)
+    /// - Request/response streaming (no buffering in linear Wasm memory)
+    /// - Timeouts and cancellation
+    /// - Robust redirect handling (3xx status codes)
+    /// - Proper status handling (1xx, 204/304 no-body, chunked transfer)
+    /// - Charset detection and content handling
+    /// - Automatic retries with exponential backoff for transient failures
+    /// 
+    /// Examples:
+    /// - Simple GET: fetch("https://example.com", null)
+    /// - POST with JSON: fetch("https://api.example.com/data", { method: "POST", body: "{...}", headers: [{ name: "Content-Type", value: "application/json" }] })
+    /// - With timeout: fetch("https://slow.example.com", { timeout: 5000 })
+    fetch: func(url: string, options: option<request-options>) -> result<response, string>;
+}
+
+/// Fetch HTTP client world
+world fetch {
+    export types;
+}

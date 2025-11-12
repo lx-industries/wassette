@@ -1,0 +1,14 @@
+{
+  "name": "fetch-es",
+  "version": "1.0.0",
+  "description": "A comprehensive HTTP fetch component with streaming, retries, and robust error handling",
+  "main": "fetch.js",
+  "scripts": {
+    "build": "jco componentize ./fetch.js --wit ./wit -d http -d random -d stdio -d clocks -o ./fetch.wasm"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@bytecodealliance/componentize-js": "0.18.1",
+    "@bytecodealliance/jco": "^1.11.1"
+  }
+}

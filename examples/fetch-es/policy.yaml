@@ -1,0 +1,8 @@
+version: "1.0"
+description: "Permission policy for fetch-es example in wassette"
+permissions:
+  network:
+    allow:
+      - host: "https://example.com/"
+      - host: "https://httpbin.org/"
+      - host: "https://api.github.com/"
