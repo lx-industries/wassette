@@ -38,7 +38,7 @@ async fn test_fetch_es_simple_get() -> Result<()> {
     let result = manager
         .execute_component_call(
             &component_id,
-            "component:fetch-es/types#fetch",
+            "component_fetch_es_types_fetch",
             &json!({
                 "url": "https://example.com/",
                 "options": null
@@ -89,7 +89,7 @@ async fn test_fetch_es_post_request() -> Result<()> {
     let result = manager
         .execute_component_call(
             &component_id,
-            "component:fetch-es/types#fetch",
+            "component_fetch_es_types_fetch",
             &json!({
                 "url": "https://httpbin.org/post",
                 "options": {
@@ -135,7 +135,7 @@ async fn test_fetch_es_timeout() -> Result<()> {
     let result = manager
         .execute_component_call(
             &component_id,
-            "component:fetch-es/types#fetch",
+            "component_fetch_es_types_fetch",
             &json!({
                 "url": "https://httpbin.org/delay/5",
                 "options": {
@@ -198,7 +198,7 @@ async fn test_fetch_es_http_methods() -> Result<()> {
         let result = manager
             .execute_component_call(
                 &component_id,
-                "component:fetch-es/types#fetch",
+                "component_fetch_es_types_fetch",
                 &json!({
                     "url": url,
                     "options": {
@@ -243,7 +243,7 @@ async fn test_fetch_es_redirect_handling() -> Result<()> {
     let result = manager
         .execute_component_call(
             &component_id,
-            "component:fetch-es/types#fetch",
+            "component_fetch_es_types_fetch",
             &json!({
                 "url": "https://httpbin.org/redirect/1",
                 "options": {
@@ -283,7 +283,7 @@ async fn test_fetch_es_no_body_status_codes() -> Result<()> {
     let result = manager
         .execute_component_call(
             &component_id,
-            "component:fetch-es/types#fetch",
+            "component_fetch_es_types_fetch",
             &json!({
                 "url": "https://httpbin.org/status/204",
                 "options": null
@@ -325,7 +325,7 @@ async fn test_fetch_es_charset_detection() -> Result<()> {
     let result = manager
         .execute_component_call(
             &component_id,
-            "component:fetch-es/types#fetch",
+            "component_fetch_es_types_fetch",
             &json!({
                 "url": "https://httpbin.org/html",
                 "options": null
@@ -369,7 +369,7 @@ async fn test_fetch_es_retry_on_transient_error() -> Result<()> {
     let result = manager
         .execute_component_call(
             &component_id,
-            "component:fetch-es/types#fetch",
+            "component_fetch_es_types_fetch",
             &json!({
                 "url": "https://httpbin.org/status/503",
                 "options": {
@@ -421,7 +421,7 @@ async fn test_fetch_es_disable_retry() -> Result<()> {
     let result = manager
         .execute_component_call(
             &component_id,
-            "component:fetch-es/types#fetch",
+            "component_fetch_es_types_fetch",
             &json!({
                 "url": "https://httpbin.org/status/503",
                 "options": {
@@ -462,7 +462,7 @@ async fn test_fetch_es_custom_headers() -> Result<()> {
     let result = manager
         .execute_component_call(
             &component_id,
-            "component:fetch-es/types#fetch",
+            "component_fetch_es_types_fetch",
             &json!({
                 "url": "https://httpbin.org/headers",
                 "options": {
