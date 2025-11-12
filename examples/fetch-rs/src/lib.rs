@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 use spin_sdk::http::{send, Method, Request, Response};
+use url::Url;
 
 #[allow(warnings)]
 mod bindings;
@@ -53,9 +54,15 @@ async fn fetch_with_retry(
     max_retries: u32,
 ) -> Result<HttpResponse, Box<dyn std::error::Error>> {
     let method = options.method.as_ref().unwrap_or(&HttpMethod::Get);
+    // Per RFC 7231, GET, HEAD, OPTIONS, PUT, and DELETE are considered idempotent.
+    // PUT is idempotent because it should replace the entire resource with the given representation.
     let is_idempotent = matches!(
         method,
-        HttpMethod::Get | HttpMethod::Head | HttpMethod::Options | HttpMethod::Put | HttpMethod::Delete
+        HttpMethod::Get
+            | HttpMethod::Head
+            | HttpMethod::Options
+            | HttpMethod::Put
+            | HttpMethod::Delete
     );
 
     let mut attempt = 0;
@@ -116,12 +123,15 @@ async fn fetch_once(
     options: &RequestOptions,
 ) -> Result<HttpResponse, Box<dyn std::error::Error>> {
     let mut current_url = url.to_string();
-    let mut current_method = options.method.clone();
+    let mut current_method = options.method;
     let current_headers = options.headers.clone();
-    
-    let max_redirects = options.follow_redirects.unwrap_or(true)
-        .then(|| options.max_redirects.unwrap_or(10))
-        .unwrap_or(0);
+    let mut current_body = options.body.clone();
+
+    let max_redirects = if options.follow_redirects.unwrap_or(true) {
+        options.max_redirects.unwrap_or(10)
+    } else {
+        0
+    };
     let mut redirect_count = 0;
 
     loop {
@@ -140,6 +150,16 @@ async fn fetch_once(
             }
         }
 
+        // Add request body for methods that support it
+        if let Some(body) = &current_body {
+            if matches!(
+                method,
+                HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
+            ) {
+                builder.body(body.as_str());
+            }
+        }
+
         // Build the request
         let request = builder.build();
 
@@ -153,16 +173,17 @@ async fn fetch_once(
                 .and_then(|v| v.as_str())
                 .ok_or("Redirect response missing Location header")?;
 
-            // Resolve relative URLs
-            current_url = if location.starts_with("http://") || location.starts_with("https://") {
-                location.to_string()
-            } else {
-                resolve_relative_url(&current_url, location)?
-            };
+            // Resolve relative URLs using proper URL parsing
+            current_url = resolve_relative_url(&current_url, location)?;
 
-            // For 303, always use GET for the redirect
-            if response.status() == &303 {
+            // Per HTTP spec: 301 and 302 with POST should convert to GET (historical behavior)
+            // 303 always converts to GET
+            let status = *response.status();
+            if status == 303
+                || ((status == 301 || status == 302) && matches!(method, HttpMethod::Post))
+            {
                 current_method = Some(HttpMethod::Get);
+                current_body = None; // Clear body when converting to GET
             }
 
             redirect_count += 1;
@@ -179,27 +200,15 @@ fn is_redirect_status(status: &u16) -> bool {
     matches!(status, 301 | 302 | 303 | 307 | 308)
 }
 
-/// Resolve relative URL against base URL
+/// Resolve relative URL against base URL using proper URL parsing
 fn resolve_relative_url(base: &str, relative: &str) -> Result<String, Box<dyn std::error::Error>> {
-    if relative.starts_with('/') {
-        // Absolute path
-        let url_parts: Vec<&str> = base.splitn(4, '/').collect();
-        if url_parts.len() >= 3 {
-            Ok(format!("{}//{}{}", url_parts[0], url_parts[2], relative))
-        } else {
-            Err("Invalid base URL".into())
-        }
-    } else {
-        // Relative path
-        let base_path = base.rsplit_once('/').map(|(p, _)| p).unwrap_or(base);
-        Ok(format!("{}/{}", base_path, relative))
-    }
+    let base_url = Url::parse(base)?;
+    let resolved = base_url.join(relative)?;
+    Ok(resolved.to_string())
 }
 
 /// Process the HTTP response
-async fn process_response(
-    response: Response,
-) -> Result<HttpResponse, Box<dyn std::error::Error>> {
+async fn process_response(response: Response) -> Result<HttpResponse, Box<dyn std::error::Error>> {
     let status = *response.status();
 
     // Extract headers
@@ -225,9 +234,9 @@ async fn process_response(
     }
 
     // Handle 1xx informational responses
+    // These are interim responses and don't have a body.
+    // The client should continue waiting for the final response.
     if (100..200).contains(&status) {
-        // For 100 Continue, we should continue reading the response
-        // For now, return empty body
         return Ok(HttpResponse {
             status,
             headers,
@@ -346,8 +355,13 @@ fn html_to_markdown(html: &str) -> String {
 
     for element in fragment.select(&text_selector) {
         let tag_name = element.value().name();
-        let text = element.text().collect::<Vec<_>>().join(" ").trim().to_string();
-        
+        let text = element
+            .text()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string();
+
         if text.is_empty() {
             continue;
         }
@@ -366,7 +380,7 @@ fn html_to_markdown(html: &str) -> String {
                 } else {
                     markdown.push_str(&format!("{}\n\n", text));
                 }
-            },
+            }
             _ => markdown.push_str(&format!("{}\n\n", text)),
         }
     }

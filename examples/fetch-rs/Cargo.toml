@@ -13,7 +13,7 @@ wit-bindgen = "0.47.0"
 scraper = "0.18.1"
 encoding_rs = "0.8.34"
 base64 = "0.22.1"
-rand = "0.8.5"
+url = "2.5.4"
 
 [lib]
 crate-type = ["cdylib"]
