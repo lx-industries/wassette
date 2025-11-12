@@ -38,6 +38,7 @@ use format::{print_result, OutputFormat};
 use server::McpServer;
 use tools::ToolName;
 use utils::{format_build_info, load_component_registry, parse_env_var};
+use wassette::{IpcServer, IpcServerConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -141,6 +142,24 @@ async fn main() -> Result<()> {
                 }
 
                 let server = McpServer::new(lifecycle_manager.clone(), cfg.disable_builtin_tools);
+
+                // Start IPC server for secret management
+                let ipc_socket_path = IpcServerConfig::default_socket_path()
+                    .context("Failed to get default IPC socket path")?;
+                let ipc_config = IpcServerConfig::new(
+                    ipc_socket_path.clone(),
+                    lifecycle_manager.secrets_manager_arc(),
+                );
+                let mut ipc_server = IpcServer::new(ipc_config);
+
+                // Spawn IPC server in background
+                let _ipc_handle = tokio::spawn(async move {
+                    if let Err(e) = ipc_server.start().await {
+                        tracing::error!("IPC server failed: {}", e);
+                    }
+                });
+
+                tracing::info!("IPC server started on {}", ipc_socket_path.display());
 
                 // Start background component loading
                 let server_clone = server.clone();

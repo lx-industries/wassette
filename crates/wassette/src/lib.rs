@@ -29,6 +29,7 @@ use wasmtime::Store;
 mod component_storage;
 mod config;
 mod http;
+pub mod ipc_server;
 mod loader;
 pub mod oci_multi_layer;
 mod policy_internal;
@@ -40,6 +41,7 @@ mod wasistate;
 use component_storage::ComponentStorage;
 pub use config::{LifecycleBuilder, LifecycleConfig};
 pub use http::WassetteWasiState;
+pub use ipc_server::{IpcServer, IpcServerConfig};
 use loader::{ComponentResource, DownloadedResource};
 use policy_internal::PolicyManager;
 pub use policy_internal::{PermissionGrantRequest, PermissionRule, PolicyInfo};
@@ -1303,6 +1305,11 @@ impl LifecycleManager {
     /// Get the secrets manager
     pub fn secrets_manager(&self) -> &SecretsManager {
         &self.secrets_manager
+    }
+
+    /// Get the secrets manager Arc for sharing across tasks
+    pub fn secrets_manager_arc(&self) -> Arc<SecretsManager> {
+        Arc::clone(&self.secrets_manager)
     }
 
     /// List secrets for a component
