@@ -16,6 +16,7 @@ use serde_json::{json, Map};
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
+mod authorization;
 mod cli_handlers;
 mod commands;
 mod config;
@@ -140,7 +141,30 @@ async fn main() -> Result<()> {
                             Default::default(),
                         );
 
-                        let router = axum::Router::new().nest_service("/mcp", service);
+                        // Create base URL for authorization metadata
+                        let base_url = format!("http://{}", bind_address);
+
+                        // Create authorization configuration (disabled by default)
+                        // To enable authorization, set auth_required to true
+                        let auth_config = authorization::AuthorizationConfig::new(
+                            base_url.clone(),
+                            false, // Authorization is optional by default
+                        );
+
+                        // Create the main MCP service router
+                        let mcp_router = axum::Router::new().nest_service("/mcp", service);
+
+                        // Create the auth metadata router
+                        let auth_router = authorization::create_auth_router(auth_config);
+
+                        // Merge routers and add WWW-Authenticate header middleware
+                        let router = axum::Router::new()
+                            .merge(mcp_router)
+                            .merge(auth_router)
+                            .layer(axum::middleware::from_fn(
+                                authorization::add_www_authenticate_header,
+                            ));
+
                         let tcp_listener = tokio::net::TcpListener::bind(&bind_address).await?;
 
                         // Spawn the server in a background task
@@ -155,6 +179,10 @@ async fn main() -> Result<()> {
                         tracing::info!(
                             "MCP server is ready and listening on http://{}/mcp",
                             bind_address
+                        );
+                        tracing::info!(
+                            "OAuth metadata available at {}/.well-known/oauth-authorization-server",
+                            base_url
                         );
 
                         // Wait for the server task to complete

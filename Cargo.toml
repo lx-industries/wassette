@@ -58,6 +58,7 @@ rmcp = { workspace = true, features = [
     "transport-streamable-http-server",
     "transport-io",
     "macros",
+    "auth",
 ] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
