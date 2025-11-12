@@ -1,14 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-//! Authorization support for MCP server using OAuth 2.1
+//! Authorization support for MCP server
 //!
-//! This module provides optional authorization support for the streamable-HTTP transport,
-//! conforming to the MCP authorization specification.
+//! This module implements the MCP authorization specification's metadata discovery requirements
+//! by providing OAuth 2.0 Authorization Server Metadata endpoints (RFC 8414) and adding
+//! WWW-Authenticate headers to 401 responses. It does not implement a full OAuth authorization
+//! flow - only the discovery and header requirements from the MCP spec.
 
 use std::collections::HashMap;
 
-use anyhow::Result;
 use axum::extract::Request;
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware::Next;
@@ -18,8 +19,10 @@ use serde::{Deserialize, Serialize};
 
 /// OAuth 2.0 Authorization Server Metadata (RFC 8414)
 ///
-/// This structure is compatible with rmcp's AuthorizationMetadata
-/// but defined here to avoid dependency issues.
+/// This structure defines the metadata format for OAuth discovery endpoints.
+/// While the rmcp crate's `auth` feature provides OAuth client support, this
+/// implementation only provides the metadata discovery endpoint required by
+/// the MCP specification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthorizationMetadata {
     /// The authorization endpoint URL
@@ -61,6 +64,7 @@ impl AuthorizationMetadata {
 #[derive(Debug, Clone)]
 pub struct AuthorizationConfig {
     /// The base URL for the server (e.g., "http://localhost:9001")
+    #[allow(dead_code)] // Only used in tests via metadata_url()
     pub base_url: String,
     /// The authorization metadata
     pub metadata: AuthorizationMetadata,
@@ -71,12 +75,6 @@ impl AuthorizationConfig {
     pub fn new(base_url: String) -> Self {
         let metadata = AuthorizationMetadata::new(&base_url);
         Self { base_url, metadata }
-    }
-
-    /// Get the metadata discovery URL
-    #[allow(dead_code)]
-    pub fn metadata_url(&self) -> String {
-        format!("{}/.well-known/oauth-authorization-server", self.base_url)
     }
 }
 
@@ -89,10 +87,7 @@ pub fn create_auth_router(config: AuthorizationConfig) -> Router {
 }
 
 /// Middleware that adds WWW-Authenticate header to 401 responses
-pub async fn add_www_authenticate_header(
-    request: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
+pub async fn add_www_authenticate_header(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
 
     // If the response is 401 Unauthorized, add WWW-Authenticate header
@@ -104,15 +99,22 @@ pub async fn add_www_authenticate_header(
             .headers
             .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
 
-        Ok(Response::from_parts(parts, body))
+        Response::from_parts(parts, body)
     } else {
-        Ok(response)
+        response
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Test helper to get metadata discovery URL
+    impl AuthorizationConfig {
+        fn metadata_url(&self) -> String {
+            format!("{}/.well-known/oauth-authorization-server", self.base_url)
+        }
+    }
 
     #[test]
     fn test_authorization_metadata_creation() {

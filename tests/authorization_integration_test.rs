@@ -13,7 +13,6 @@ use tempfile::TempDir;
 use test_log::test;
 use tokio::net::TcpListener;
 use tokio::time::sleep;
-use wassette::LifecycleManager;
 
 /// Find an available port for testing
 async fn find_open_port() -> Result<u16> {
@@ -28,14 +27,6 @@ async fn find_open_port() -> Result<u16> {
 /// Start a wassette server with streamable-http transport for testing
 async fn start_test_server(port: u16) -> Result<(tokio::task::JoinHandle<()>, TempDir)> {
     let tempdir = tempfile::tempdir()?;
-
-    let _manager = LifecycleManager::builder(tempdir.path())
-        .with_environment_vars(std::collections::HashMap::new())
-        .with_oci_client(oci_client::Client::default())
-        .with_http_client(reqwest::Client::default())
-        .build()
-        .await
-        .context("Failed to create LifecycleManager")?;
 
     let handle = tokio::spawn(async move {
         let bind_address = format!("127.0.0.1:{}", port);
@@ -91,8 +82,19 @@ async fn start_test_server(port: u16) -> Result<(tokio::task::JoinHandle<()>, Te
             .unwrap();
     });
 
-    // Give the server time to start
-    sleep(Duration::from_millis(500)).await;
+    // Wait for server to be ready (retry for up to 5 seconds)
+    let client = Client::new();
+    let health_check_url = format!(
+        "http://127.0.0.1:{}/.well-known/oauth-authorization-server",
+        port
+    );
+
+    for _ in 0..50 {
+        if client.get(&health_check_url).send().await.is_ok() {
+            break;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
 
     Ok((handle, tempdir))
 }
@@ -139,7 +141,6 @@ async fn test_oauth_metadata_endpoint() -> Result<()> {
     );
 
     server_handle.abort();
-    drop(_tempdir);
     Ok(())
 }
 
@@ -184,7 +185,6 @@ async fn test_unauthorized_request_has_www_authenticate_header() -> Result<()> {
     );
 
     server_handle.abort();
-    drop(_tempdir);
     Ok(())
 }
 
@@ -221,6 +221,5 @@ async fn test_get_request_unauthorized_has_www_authenticate() -> Result<()> {
     );
 
     server_handle.abort();
-    drop(_tempdir);
     Ok(())
 }
