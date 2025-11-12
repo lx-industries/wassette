@@ -7,6 +7,7 @@ use std::sync::Once;
 use anyhow::{Context, Result};
 
 static FETCH_COMPONENT_BUILD: Once = Once::new();
+static FETCH_ES_COMPONENT_BUILD: Once = Once::new();
 static FILESYSTEM_COMPONENT_BUILD: Once = Once::new();
 
 /// Ensure fetch-rs component is built exactly once for all tests
@@ -47,6 +48,67 @@ pub async fn build_fetch_component() -> Result<PathBuf> {
 
     // Ensure component is built exactly once across all tests
     ensure_fetch_component_built()?;
+
+    if !component_path.exists() {
+        anyhow::bail!(
+            "Component file not found after build: {}",
+            component_path.display()
+        );
+    }
+
+    Ok(component_path)
+}
+
+/// Ensure fetch-es component is built exactly once for all tests
+fn ensure_fetch_es_component_built() -> Result<()> {
+    FETCH_ES_COMPONENT_BUILD.call_once(|| {
+        let result = std::panic::catch_unwind(|| {
+            let top_level = PathBuf::from(
+                std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
+            );
+
+            let fetch_es_dir = top_level.join("examples/fetch-es");
+            
+            // Run npm install
+            let npm_install_status = std::process::Command::new("npm")
+                .current_dir(&fetch_es_dir)
+                .args(["install"])
+                .status()
+                .expect("Failed to execute npm install");
+
+            if !npm_install_status.success() {
+                panic!("Failed to run npm install for fetch-es component");
+            }
+
+            // Run npm run build
+            let npm_build_status = std::process::Command::new("npm")
+                .current_dir(&fetch_es_dir)
+                .args(["run", "build"])
+                .status()
+                .expect("Failed to execute npm run build");
+
+            if !npm_build_status.success() {
+                panic!("Failed to compile fetch-es component");
+            }
+        });
+
+        if result.is_err() {
+            panic!("Failed to build fetch-es component in Once block");
+        }
+    });
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub async fn build_fetch_es_component() -> Result<PathBuf> {
+    let top_level =
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").context("CARGO_MANIFEST_DIR not set")?);
+
+    let component_path = top_level.join("examples/fetch-es/fetch.wasm");
+
+    // Ensure component is built exactly once across all tests
+    ensure_fetch_es_component_built()?;
 
     if !component_path.exists() {
         anyhow::bail!(
