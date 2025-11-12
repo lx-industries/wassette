@@ -22,6 +22,31 @@ use crate::component_storage::ComponentStorage;
 use crate::loader::{self, PolicyResource};
 use crate::{SecretsManager, WasiStateTemplate};
 
+// Helper module for SystemTime serialization
+mod system_time_serde {
+    use std::time::SystemTime;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let duration = time
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(serde::ser::Error::custom)?;
+        duration.as_secs().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let secs = u64::deserialize(deserializer)?;
+        Ok(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs))
+    }
+}
+
 /// Granular permission rule types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PermissionRule {
@@ -68,7 +93,7 @@ pub(crate) struct PolicyManager {
 }
 
 /// Information about a policy attached to a component
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyInfo {
     /// Unique identifier for the policy
     pub policy_id: String,
@@ -79,6 +104,7 @@ pub struct PolicyInfo {
     /// ID of the component this policy is attached to
     pub component_id: String,
     /// Timestamp when the policy was created/attached
+    #[serde(with = "system_time_serde")]
     pub created_at: std::time::SystemTime,
 }
 

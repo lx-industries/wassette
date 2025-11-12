@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+base64 = "0.22"
 component2json = { path = "../component2json" }
 etcetera = { workspace = true }
 futures = { workspace = true }

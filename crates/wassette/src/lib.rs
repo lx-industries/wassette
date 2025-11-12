@@ -35,6 +35,7 @@ mod policy_internal;
 mod runtime_context;
 pub mod schema;
 mod secrets;
+pub mod state_persistence;
 mod wasistate;
 
 use component_storage::ComponentStorage;
@@ -45,6 +46,9 @@ use policy_internal::PolicyManager;
 pub use policy_internal::{PermissionGrantRequest, PermissionRule, PolicyInfo};
 use runtime_context::RuntimeContext;
 pub use secrets::SecretsManager;
+pub use state_persistence::{
+    ComponentState, PolicyState, RestoreOptions, SnapshotMetadata, SnapshotOptions, StateSnapshot,
+};
 use wasistate::WasiState;
 pub use wasistate::{
     create_wasi_state_template_from_policy, CustomResourceLimiter, PermissionError,
@@ -1352,6 +1356,272 @@ impl LifecycleManager {
         self.secrets_manager
             .load_component_secrets(component_id)
             .await
+    }
+
+    /// Export current state to a snapshot
+    ///
+    /// This captures the complete state of loaded components, policies, and metadata.
+    /// Secrets are NOT included by default unless explicitly requested with encryption.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - Configuration for what to include in the snapshot
+    ///
+    /// # Returns
+    ///
+    /// A `StateSnapshot` containing the current wassette state
+    #[instrument(skip(self, options))]
+    pub async fn export_state(&self, options: SnapshotOptions) -> Result<StateSnapshot> {
+        use crate::state_persistence::{ComponentState, PolicyState};
+
+        let mut snapshot = StateSnapshot::new();
+        snapshot.metadata = options.metadata;
+
+        // Get list of components to export
+        let component_ids = self.list_components().await;
+        let components_to_export: Vec<String> = if let Some(filter) = &options.component_filter {
+            component_ids
+                .into_iter()
+                .filter(|id| filter.contains(id))
+                .collect()
+        } else {
+            component_ids
+        };
+
+        info!(
+            "Exporting state for {} component(s)",
+            components_to_export.len()
+        );
+
+        for component_id in &components_to_export {
+            debug!("Exporting state for component: {}", component_id);
+
+            // Load component metadata
+            let metadata_path = self.storage.metadata_path(component_id);
+            let metadata: ComponentMetadata = if metadata_path.exists() {
+                let metadata_content = tokio::fs::read_to_string(&metadata_path)
+                    .await
+                    .with_context(|| {
+                        format!("Failed to read metadata for component: {}", component_id)
+                    })?;
+                serde_json::from_str(&metadata_content).with_context(|| {
+                    format!("Failed to parse metadata for component: {}", component_id)
+                })?
+            } else {
+                warn!(
+                    "Metadata not found for component: {}, skipping",
+                    component_id
+                );
+                continue;
+            };
+
+            // Create component state
+            let mut component_state = ComponentState::new(
+                component_id.clone(),
+                // We don't have the original URI stored, so we'll use the component path
+                format!(
+                    "file://{}",
+                    self.storage.component_path(component_id).display()
+                ),
+                metadata,
+            );
+
+            // Load policy if it exists
+            let policy_path = self.storage.policy_path(component_id);
+            if policy_path.exists() {
+                let policy_content =
+                    tokio::fs::read_to_string(&policy_path)
+                        .await
+                        .with_context(|| {
+                            format!("Failed to read policy for component: {}", component_id)
+                        })?;
+
+                let policy_metadata_path = self.storage.policy_metadata_path(component_id);
+                let (source_uri, created_at) = if policy_metadata_path.exists() {
+                    let policy_meta_content = tokio::fs::read_to_string(&policy_metadata_path)
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "Failed to read policy metadata for component: {}",
+                                component_id
+                            )
+                        })?;
+                    let policy_info: PolicyInfo = serde_json::from_str(&policy_meta_content)
+                        .with_context(|| {
+                            format!(
+                                "Failed to parse policy metadata for component: {}",
+                                component_id
+                            )
+                        })?;
+                    let created_at = policy_info
+                        .created_at
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    (policy_info.source_uri, created_at)
+                } else {
+                    (format!("file://{}", policy_path.display()), 0)
+                };
+
+                component_state.policy = Some(PolicyState {
+                    content: policy_content,
+                    source_uri,
+                    created_at,
+                });
+            }
+
+            // Optionally include binary data
+            if options.include_binaries {
+                let component_path = self.storage.component_path(component_id);
+                if component_path.exists() {
+                    let binary_data =
+                        tokio::fs::read(&component_path).await.with_context(|| {
+                            format!("Failed to read component binary for: {}", component_id)
+                        })?;
+                    use base64::Engine;
+                    component_state.binary_data =
+                        Some(base64::engine::general_purpose::STANDARD.encode(&binary_data));
+                    component_state.include_binary = Some(true);
+                }
+            }
+
+            snapshot.components.push(component_state);
+        }
+
+        info!("State export completed successfully");
+        Ok(snapshot)
+    }
+
+    /// Import state from a snapshot
+    ///
+    /// This restores components, policies, and metadata from a previously exported snapshot.
+    ///
+    /// # Arguments
+    ///
+    /// * `snapshot` - The snapshot to restore from
+    /// * `options` - Configuration for how to restore the state
+    ///
+    /// # Returns
+    ///
+    /// Number of components successfully restored
+    #[instrument(skip(self, snapshot, options))]
+    pub async fn import_state(
+        &self,
+        snapshot: &StateSnapshot,
+        options: RestoreOptions,
+    ) -> Result<usize> {
+        // Validate snapshot first
+        snapshot.validate()?;
+
+        info!(
+            "Importing state from snapshot (version {}, {} component(s))",
+            snapshot.version,
+            snapshot.components.len()
+        );
+
+        // Filter components if needed
+        let components_to_import: Vec<&ComponentState> =
+            if let Some(filter) = &options.component_filter {
+                snapshot
+                    .components
+                    .iter()
+                    .filter(|c| filter.contains(&c.component_id))
+                    .collect()
+            } else {
+                snapshot.components.iter().collect()
+            };
+
+        let mut restored_count = 0;
+
+        for component_state in components_to_import {
+            let component_id = &component_state.component_id;
+
+            debug!("Importing component: {}", component_id);
+
+            // Check if component already exists
+            if options.skip_existing {
+                let component_ids = self.list_components().await;
+                if component_ids.contains(component_id) {
+                    info!("Component already exists, skipping: {}", component_id);
+                    continue;
+                }
+            }
+
+            // Restore policy if present
+            if let Some(policy) = &component_state.policy {
+                let policy_path = self.storage.policy_path(component_id);
+                tokio::fs::write(&policy_path, &policy.content)
+                    .await
+                    .with_context(|| {
+                        format!("Failed to write policy for component: {}", component_id)
+                    })?;
+
+                // Set appropriate file permissions on Unix
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let metadata = tokio::fs::metadata(&policy_path).await?;
+                    let mut perms = metadata.permissions();
+                    perms.set_mode(0o600);
+                    tokio::fs::set_permissions(&policy_path, perms).await?;
+                }
+
+                debug!("Restored policy for component: {}", component_id);
+            }
+
+            // Restore binary if included
+            if let Some(binary_data_b64) = &component_state.binary_data {
+                use base64::Engine;
+                let binary_data = base64::engine::general_purpose::STANDARD
+                    .decode(binary_data_b64)
+                    .with_context(|| {
+                        format!(
+                            "Failed to decode binary data for component: {}",
+                            component_id
+                        )
+                    })?;
+
+                let component_path = self.storage.component_path(component_id);
+                tokio::fs::write(&component_path, &binary_data)
+                    .await
+                    .with_context(|| {
+                        format!("Failed to write component binary for: {}", component_id)
+                    })?;
+
+                debug!("Restored binary for component: {}", component_id);
+            }
+
+            // Restore metadata
+            let metadata_path = self.storage.metadata_path(component_id);
+            let metadata_json = serde_json::to_string_pretty(&component_state.metadata)
+                .context("Failed to serialize component metadata")?;
+            tokio::fs::write(&metadata_path, metadata_json)
+                .await
+                .with_context(|| {
+                    format!("Failed to write metadata for component: {}", component_id)
+                })?;
+
+            // If we have a binary, try to load the component
+            if component_state.binary_data.is_some() {
+                match self.load_component(&component_state.source_uri).await {
+                    Ok(_) => {
+                        info!("Successfully loaded component: {}", component_id);
+                    }
+                    Err(e) => {
+                        warn!("Failed to load component {}: {}", component_id, e);
+                        // Continue with other components
+                    }
+                }
+            }
+
+            restored_count += 1;
+        }
+
+        info!(
+            "State import completed successfully ({} component(s) restored)",
+            restored_count
+        );
+        Ok(restored_count)
     }
 }
 
