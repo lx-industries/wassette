@@ -200,11 +200,13 @@ impl Loadable for ComponentResource {
             eprintln!("Downloading component from {}...", reference);
         }
 
+        // Get authentication credentials for this registry
+        let auth = crate::oci_auth::get_registry_auth(&reference)
+            .context("Failed to get registry authentication")?;
+
         // First try oci-wasm for backwards compatibility with single-layer artifacts
         let wasm_client = oci_wasm::WasmClient::from(oci_client.clone());
-        let result = wasm_client
-            .pull(&reference, &oci_client::secrets::RegistryAuth::Anonymous)
-            .await;
+        let result = wasm_client.pull(&reference, &auth).await;
 
         match result {
             Ok(data) => {
@@ -237,6 +239,7 @@ impl Loadable for ComponentResource {
                     let artifact = crate::oci_multi_layer::pull_multi_layer_artifact_with_progress(
                         &reference,
                         oci_client,
+                        &auth,
                         show_progress,
                     )
                     .await

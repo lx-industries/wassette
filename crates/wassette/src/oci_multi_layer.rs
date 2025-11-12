@@ -97,25 +97,25 @@ fn verify_digest(data: &[u8], expected_digest: &str) -> Result<()> {
 pub async fn pull_multi_layer_artifact(
     reference: &Reference,
     client: &Client,
+    auth: &oci_client::secrets::RegistryAuth,
 ) -> Result<MultiLayerArtifact> {
-    pull_multi_layer_artifact_with_progress(reference, client, false).await
+    pull_multi_layer_artifact_with_progress(reference, client, auth, false).await
 }
 
 /// Pull a multi-layer OCI artifact and extract all relevant layers with optional progress reporting
 pub async fn pull_multi_layer_artifact_with_progress(
     reference: &Reference,
     client: &Client,
+    auth: &oci_client::secrets::RegistryAuth,
     show_progress: bool,
 ) -> Result<MultiLayerArtifact> {
-    let auth = oci_client::secrets::RegistryAuth::Anonymous;
-
     // Pull just the manifest first
     if show_progress {
         eprintln!("Pulling manifest for {}...", reference);
     }
     info!("Pulling OCI manifest: {}", reference);
     let (manifest, manifest_digest) = client
-        .pull_manifest(reference, &auth)
+        .pull_manifest(reference, auth)
         .await
         .context("Failed to pull OCI manifest")?;
 
@@ -276,8 +276,12 @@ pub async fn pull_multi_layer_artifact_with_progress(
 
 /// Pull just the WASM component from a multi-layer OCI artifact
 /// This is a compatibility function that ignores non-WASM layers
-pub async fn pull_wasm_only(reference: &Reference, client: &Client) -> Result<Vec<u8>> {
-    let artifact = pull_multi_layer_artifact(reference, client).await?;
+pub async fn pull_wasm_only(
+    reference: &Reference,
+    client: &Client,
+    auth: &oci_client::secrets::RegistryAuth,
+) -> Result<Vec<u8>> {
+    let artifact = pull_multi_layer_artifact(reference, client, auth).await?;
 
     if artifact.policy_data.is_some() {
         info!("Note: Policy layer found but will not be processed in this context");
@@ -298,10 +302,11 @@ pub async fn pull_wasm_only(reference: &Reference, client: &Client) -> Result<Ve
 pub async fn pull_multi_layer_artifact_secure(
     reference: &Reference,
     client: &Client,
+    auth: &oci_client::secrets::RegistryAuth,
 ) -> Result<MultiLayerArtifact> {
     // This uses the same implementation as pull_multi_layer_artifact
     // since we've already added digest verification there
-    pull_multi_layer_artifact_with_progress(reference, client, false).await
+    pull_multi_layer_artifact_with_progress(reference, client, auth, false).await
 }
 
 #[cfg(test)]

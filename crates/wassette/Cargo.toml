@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 component2json = { path = "../component2json" }
+docker_credential = "1.3"
 etcetera = { workspace = true }
 futures = { workspace = true }
 hex = "0.4"

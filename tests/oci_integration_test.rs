@@ -252,8 +252,10 @@ mod multi_layer_oci_tests {
             ..Default::default()
         });
 
+        let auth = oci_client::secrets::RegistryAuth::Anonymous;
         let artifact =
-            wassette::oci_multi_layer::pull_multi_layer_artifact(&reference, &client).await?;
+            wassette::oci_multi_layer::pull_multi_layer_artifact(&reference, &client, &auth)
+                .await?;
 
         // Verify WASM component was downloaded
         assert!(!artifact.wasm_data.is_empty());

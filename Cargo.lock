@@ -4845,6 +4845,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "component2json",
+ "docker_credential",
  "etcetera",
  "futures",
  "hex",
