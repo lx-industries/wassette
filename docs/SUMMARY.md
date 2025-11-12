@@ -30,6 +30,7 @@
 # Reference
 
 - [CLI](./reference/cli.md)
+- [State Management](./reference/state-management.md)
 - [Built-in Tools](./reference/built-in-tools.md)
 - [Permissions](./reference/permissions.md)
 - [Environment Variables](./reference/environment-variables.md)
