@@ -305,7 +305,7 @@ spec:
   timeout: "30s"
 ```
 
-For detailed integration instructions, see the [Kubernetes deployment guide](../../deployment/kubernetes/kagent-integration.md).
+For detailed integration instructions, see the [Kubernetes deployment guide](../../kubernetes/kagent-integration.md).
 
 ## Troubleshooting
 

@@ -66,7 +66,7 @@ spec:
         - name: components
           mountPath: /home/wassette/.local/share/wassette/components
           readOnly: false
-        {{- if or .Values.secrets.create (ne .Values.secrets.name "") }}
+        {{- if or .Values.secrets.create .Values.secrets.name }}
         - name: secrets
           mountPath: /home/wassette/.config/wassette/secrets
           readOnly: true
@@ -79,7 +79,7 @@ spec:
         {{- else }}
         emptyDir: {}
         {{- end }}
-      {{- if or .Values.secrets.create (ne .Values.secrets.name "") }}
+      {{- if or .Values.secrets.create .Values.secrets.name }}
       - name: secrets
         secret:
           secretName: {{ .Values.secrets.name | default (printf "%s-secrets" (include "wassette.fullname" .)) }}

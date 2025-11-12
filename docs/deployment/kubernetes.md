@@ -340,7 +340,7 @@ See the [kagent integration troubleshooting guide](https://github.com/microsoft/
 - 📖 [Kubernetes Deployment Guide](https://github.com/microsoft/wassette/blob/main/deployment/kubernetes/README.md)
 - 📦 [Helm Chart Documentation](https://github.com/microsoft/wassette/blob/main/deployment/helm/wassette/README.md)
 - 🔗 [Kagent Integration Guide](https://github.com/microsoft/wassette/blob/main/deployment/kubernetes/kagent-integration.md)
-- 🐳 [Docker Deployment](./docker.md)
+- 🐳 [Docker](./docker.md)
 - 🚀 [Operations Guide](./operations.md)
 
 ## Resources
