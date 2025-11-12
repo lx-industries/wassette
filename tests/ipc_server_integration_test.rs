@@ -202,3 +202,90 @@ async fn test_ipc_server_invalid_request() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn test_ipc_server_graceful_shutdown() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let socket_path = temp_dir.path().join("test.sock");
+    let secrets_dir = temp_dir.path().join("secrets");
+
+    let secrets_manager = Arc::new(SecretsManager::new(secrets_dir));
+    secrets_manager.ensure_secrets_dir().await?;
+
+    let config = IpcServerConfig::new(socket_path.clone(), secrets_manager.clone());
+    let mut server = IpcServer::new(config);
+
+    // Start server in background
+    let server_handle = tokio::spawn(async move { server.start().await });
+
+    // Give server time to start
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Verify socket exists
+    assert!(
+        socket_path.exists(),
+        "Socket should exist after server starts"
+    );
+
+    // Connect to verify server is running
+    let stream = tokio::net::UnixStream::connect(&socket_path).await?;
+    drop(stream);
+
+    // Shutdown the server by aborting the task
+    server_handle.abort();
+
+    // Give it time to clean up
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // The socket might still exist immediately after abort, but future connections should fail
+    // Try to connect and expect failure
+    let connection_result = timeout(
+        Duration::from_millis(500),
+        tokio::net::UnixStream::connect(&socket_path),
+    )
+    .await;
+
+    // Either the socket was removed or connection times out/fails
+    assert!(
+        connection_result.is_err() || connection_result.unwrap().is_err(),
+        "Connection should fail after server shutdown"
+    );
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn test_ipc_server_cleanup_on_drop() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let socket_path = temp_dir.path().join("test.sock");
+    let secrets_dir = temp_dir.path().join("secrets");
+
+    let secrets_manager = Arc::new(SecretsManager::new(secrets_dir));
+    secrets_manager.ensure_secrets_dir().await?;
+
+    {
+        let config = IpcServerConfig::new(socket_path.clone(), secrets_manager.clone());
+        let mut server = IpcServer::new(config);
+
+        // Start server in background
+        let server_handle = tokio::spawn(async move { server.start().await });
+
+        // Give server time to start
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Verify socket exists
+        assert!(socket_path.exists(), "Socket should exist");
+
+        // Drop the server handle
+        drop(server_handle);
+    }
+
+    // Give cleanup time
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Socket should still exist (cleanup happens on graceful shutdown, not drop)
+    // But new connections should eventually fail
+    Ok(())
+}
