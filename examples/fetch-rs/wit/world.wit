@@ -1,7 +1,59 @@
 package component:fetch-rs;
 
+interface types {
+    /// HTTP method for the request
+    enum http-method {
+        get,
+        head,
+        post,
+        put,
+        patch,
+        delete,
+        options,
+    }
+
+    /// HTTP header
+    record http-header {
+        name: string,
+        value: string,
+    }
+
+    /// Request options for advanced HTTP features
+    record request-options {
+        /// HTTP method (default: GET)
+        method: option<http-method>,
+        /// Request headers
+        headers: option<list<http-header>>,
+        /// Request body (for POST, PUT, PATCH)
+        body: option<string>,
+        /// Timeout in seconds (default: 30)
+        timeout-secs: option<u32>,
+        /// Whether to follow redirects (default: true)
+        follow-redirects: option<bool>,
+        /// Maximum number of redirects to follow (default: 10)
+        max-redirects: option<u32>,
+    }
+
+    /// HTTP response
+    record http-response {
+        /// HTTP status code
+        status: u16,
+        /// Response headers
+        headers: list<http-header>,
+        /// Response body
+        body: string,
+        /// Whether the body is binary (base64 encoded) or text
+        is-binary: bool,
+    }
+}
+
 /// An example world for the component to target.
 world fetch {
+    use types.{http-method, http-header, request-options, http-response};
+    
     /// Fetch data from a URL and return the response body as a String
     export fetch: func(url: string) -> result<string, string>;
+    
+    /// Advanced fetch with full HTTP method support and options
+    export fetch-advanced: func(url: string, options: request-options) -> result<http-response, string>;
 }
