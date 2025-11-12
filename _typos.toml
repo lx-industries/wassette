@@ -12,3 +12,5 @@ extend-exclude = [
 Wass = "Wass"
 # CSS variable name in docs/theme/toc.css
 existant = "existant"
+# Company name - HashiCorp Vault
+HashiCorp = "HashiCorp"
