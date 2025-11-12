@@ -9,6 +9,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use reqwest::{header, Client, StatusCode};
 use serde_json::json;
+use tempfile::TempDir;
 use test_log::test;
 use tokio::net::TcpListener;
 use tokio::time::sleep;
@@ -25,7 +26,7 @@ async fn find_open_port() -> Result<u16> {
 }
 
 /// Start a wassette server with streamable-http transport for testing
-async fn start_test_server(port: u16) -> Result<tokio::task::JoinHandle<()>> {
+async fn start_test_server(port: u16) -> Result<(tokio::task::JoinHandle<()>, TempDir)> {
     let tempdir = tempfile::tempdir()?;
 
     let _manager = LifecycleManager::builder(tempdir.path())
@@ -35,9 +36,6 @@ async fn start_test_server(port: u16) -> Result<tokio::task::JoinHandle<()>> {
         .build()
         .await
         .context("Failed to create LifecycleManager")?;
-
-    // Keep tempdir alive
-    let _tempdir_guard = tempdir;
 
     let handle = tokio::spawn(async move {
         let bind_address = format!("127.0.0.1:{}", port);
@@ -70,7 +68,7 @@ async fn start_test_server(port: u16) -> Result<tokio::task::JoinHandle<()>> {
 
         let base_url = format!("http://{}", bind_address);
         let auth_config =
-            wassette_mcp_server::authorization::AuthorizationConfig::new(base_url.clone(), false);
+            wassette_mcp_server::authorization::AuthorizationConfig::new(base_url.clone());
 
         let mcp_router = axum::Router::new().nest_service("/mcp", service);
         let auth_router = wassette_mcp_server::authorization::create_auth_router(auth_config);
@@ -91,20 +89,18 @@ async fn start_test_server(port: u16) -> Result<tokio::task::JoinHandle<()>> {
             })
             .await
             .unwrap();
-
-        drop(_tempdir_guard);
     });
 
     // Give the server time to start
     sleep(Duration::from_millis(500)).await;
 
-    Ok(handle)
+    Ok((handle, tempdir))
 }
 
 #[test(tokio::test)]
 async fn test_oauth_metadata_endpoint() -> Result<()> {
     let port = find_open_port().await?;
-    let server_handle = start_test_server(port).await?;
+    let (server_handle, _tempdir) = start_test_server(port).await?;
 
     let client = Client::new();
     let url = format!(
@@ -143,13 +139,14 @@ async fn test_oauth_metadata_endpoint() -> Result<()> {
     );
 
     server_handle.abort();
+    drop(_tempdir);
     Ok(())
 }
 
 #[test(tokio::test)]
 async fn test_unauthorized_request_has_www_authenticate_header() -> Result<()> {
     let port = find_open_port().await?;
-    let server_handle = start_test_server(port).await?;
+    let (server_handle, _tempdir) = start_test_server(port).await?;
 
     let client = Client::new();
     let url = format!("http://127.0.0.1:{}/mcp", port);
@@ -187,13 +184,14 @@ async fn test_unauthorized_request_has_www_authenticate_header() -> Result<()> {
     );
 
     server_handle.abort();
+    drop(_tempdir);
     Ok(())
 }
 
 #[test(tokio::test)]
 async fn test_get_request_unauthorized_has_www_authenticate() -> Result<()> {
     let port = find_open_port().await?;
-    let server_handle = start_test_server(port).await?;
+    let (server_handle, _tempdir) = start_test_server(port).await?;
 
     let client = Client::new();
     let url = format!("http://127.0.0.1:{}/mcp", port);
@@ -223,5 +221,6 @@ async fn test_get_request_unauthorized_has_www_authenticate() -> Result<()> {
     );
 
     server_handle.abort();
+    drop(_tempdir);
     Ok(())
 }

@@ -144,12 +144,8 @@ async fn main() -> Result<()> {
                         // Create base URL for authorization metadata
                         let base_url = format!("http://{}", bind_address);
 
-                        // Create authorization configuration (disabled by default)
-                        // To enable authorization, set auth_required to true
-                        let auth_config = authorization::AuthorizationConfig::new(
-                            base_url.clone(),
-                            false, // Authorization is optional by default
-                        );
+                        // Create authorization configuration
+                        let auth_config = authorization::AuthorizationConfig::new(base_url.clone());
 
                         // Create the main MCP service router
                         let mcp_router = axum::Router::new().nest_service("/mcp", service);

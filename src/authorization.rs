@@ -59,25 +59,18 @@ impl AuthorizationMetadata {
 
 /// Authorization configuration for the MCP server
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct AuthorizationConfig {
     /// The base URL for the server (e.g., "http://localhost:9001")
     pub base_url: String,
-    /// Whether authorization is required for all requests
-    pub required: bool,
     /// The authorization metadata
     pub metadata: AuthorizationMetadata,
 }
 
 impl AuthorizationConfig {
     /// Create a new authorization configuration
-    pub fn new(base_url: String, required: bool) -> Self {
+    pub fn new(base_url: String) -> Self {
         let metadata = AuthorizationMetadata::new(&base_url);
-        Self {
-            base_url,
-            required,
-            metadata,
-        }
+        Self { base_url, metadata }
     }
 
     /// Get the metadata discovery URL
@@ -138,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_authorization_config_metadata_url() {
-        let config = AuthorizationConfig::new("http://localhost:9001".to_string(), true);
+        let config = AuthorizationConfig::new("http://localhost:9001".to_string());
         assert_eq!(
             config.metadata_url(),
             "http://localhost:9001/.well-known/oauth-authorization-server"
