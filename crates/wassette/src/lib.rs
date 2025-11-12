@@ -35,6 +35,7 @@ mod policy_internal;
 mod runtime_context;
 pub mod schema;
 mod secrets;
+pub mod state;
 mod wasistate;
 
 use component_storage::ComponentStorage;
@@ -45,6 +46,9 @@ use policy_internal::PolicyManager;
 pub use policy_internal::{PermissionGrantRequest, PermissionRule, PolicyInfo};
 use runtime_context::RuntimeContext;
 pub use secrets::SecretsManager;
+pub use state::{
+    ComponentStateEntry, PathConfiguration, PolicyAttachment, SecretsConfiguration, WassetteState,
+};
 use wasistate::WasiState;
 pub use wasistate::{
     create_wasi_state_template_from_policy, CustomResourceLimiter, PermissionError,
@@ -1352,6 +1356,161 @@ impl LifecycleManager {
         self.secrets_manager
             .load_component_secrets(component_id)
             .await
+    }
+
+    /// Export the current state of Wassette to a snapshot
+    #[instrument(skip(self))]
+    pub async fn export_state(&self) -> Result<WassetteState> {
+        use crate::state::{ComponentStateEntry, PolicyAttachment, SecretsConfiguration};
+
+        let component_dir = self.storage.root().to_path_buf();
+        let secrets_dir = self.secrets_manager.secrets_dir().to_path_buf();
+
+        let mut state = WassetteState::new(component_dir, secrets_dir);
+
+        // Export environment variables (from the original config)
+        // Note: We don't have direct access to the environment vars here
+        // They would need to be passed through if needed
+
+        // Export each loaded component
+        let component_ids = self.list_components().await;
+        for component_id in component_ids {
+            // Get component metadata
+            let metadata = match self.load_component_metadata(&component_id).await? {
+                Some(meta) => meta,
+                None => {
+                    warn!("No metadata found for component {}", component_id);
+                    continue;
+                }
+            };
+
+            // Get policy information if attached
+            let policy = match self.get_policy_info(&component_id).await {
+                Some(policy_info) => {
+                    // Read policy content from disk
+                    let policy_path = self.get_component_policy_path(&component_id);
+                    let policy_content = tokio::fs::read_to_string(&policy_path).await.ok();
+
+                    policy_content.map(|content| PolicyAttachment {
+                        source_uri: policy_info.source_uri.clone(),
+                        policy_content: content,
+                        attached_at: policy_info
+                            .created_at
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                    })
+                }
+                None => None,
+            };
+
+            // Get secrets configuration (keys only, no values for security)
+            let secrets = match self.list_component_secrets(&component_id, false).await {
+                Ok(secrets_map) if !secrets_map.is_empty() => Some(SecretsConfiguration {
+                    env_keys: secrets_map.keys().cloned().collect(),
+                }),
+                _ => None,
+            };
+
+            let entry = ComponentStateEntry {
+                component_id: component_id.clone(),
+                metadata,
+                policy,
+                secrets,
+            };
+
+            state.add_component(entry);
+        }
+
+        info!(
+            "Exported Wassette state with {} components",
+            state.components.len()
+        );
+        Ok(state)
+    }
+
+    /// Import state from a snapshot, loading components and restoring policies
+    #[instrument(skip(self, state))]
+    pub async fn import_state(&self, state: &WassetteState) -> Result<()> {
+        state.validate_compatibility()?;
+
+        info!(
+            "Importing Wassette state (version: {}, {} components)",
+            state.version,
+            state.components.len()
+        );
+
+        let mut imported_count = 0;
+        let mut skipped_count = 0;
+
+        for entry in &state.components {
+            let component_id = &entry.component_id;
+            let component_path = self.component_path(component_id);
+
+            // Check if component wasm file exists
+            if !component_path.exists() {
+                warn!(
+                    "Component {} not found at {}, skipping",
+                    component_id,
+                    component_path.display()
+                );
+                skipped_count += 1;
+                continue;
+            }
+
+            // Save metadata if provided
+            // We save the metadata directly using the storage method since we already have it
+            if let Err(e) = self.storage.write_metadata(&entry.metadata).await {
+                warn!("Failed to save metadata for {}: {}", component_id, e);
+            }
+
+            // Restore policy if present
+            if let Some(ref policy) = entry.policy {
+                let policy_path = self.get_component_policy_path(component_id);
+                if let Err(e) = tokio::fs::write(&policy_path, &policy.policy_content).await {
+                    warn!("Failed to restore policy for {}: {}", component_id, e);
+                } else {
+                    debug!("Restored policy for {}", component_id);
+
+                    // Restore policy metadata using the same format as attach_policy
+                    let metadata = serde_json::json!({
+                        "source_uri": policy.source_uri,
+                        "attached_at": policy.attached_at
+                    });
+
+                    let policy_meta_path = self.get_component_metadata_path(component_id);
+                    if let Ok(meta_json) = serde_json::to_string_pretty(&metadata) {
+                        let _ = tokio::fs::write(&policy_meta_path, meta_json).await;
+                    }
+                }
+            }
+
+            // Note: Secrets are intentionally NOT restored automatically for security reasons
+            // Users must manually restore secrets using the set_component_secrets method
+            if entry.secrets.is_some() {
+                debug!(
+                    "Component {} has secrets configuration, but values must be set manually",
+                    component_id
+                );
+            }
+
+            imported_count += 1;
+        }
+
+        info!(
+            "State import complete: {} components imported, {} skipped",
+            imported_count, skipped_count
+        );
+
+        if skipped_count > 0 {
+            warn!(
+                "{} components were skipped because their wasm files were not found. \
+                 You may need to load these components first.",
+                skipped_count
+            );
+        }
+
+        Ok(())
     }
 }
 

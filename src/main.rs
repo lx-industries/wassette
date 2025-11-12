@@ -282,18 +282,27 @@ async fn handle_tool_cli_command(
 /// initializes engine/linker without compiling/scanning all components.
 /// Component metadata or lazy loads are used by individual handlers.
 async fn create_lifecycle_manager(component_dir: Option<PathBuf>) -> Result<LifecycleManager> {
+    create_lifecycle_manager_with_secrets(component_dir, None).await
+}
+
+async fn create_lifecycle_manager_with_secrets(
+    component_dir: Option<PathBuf>,
+    secrets_dir_override: Option<PathBuf>,
+) -> Result<LifecycleManager> {
     let config = if let Some(dir) = component_dir {
         config::Config {
             component_dir: dir,
-            secrets_dir: config::get_secrets_dir().unwrap_or_else(|_| {
-                eprintln!("WARN: Unable to determine default secrets directory, using `secrets` directory in the current working directory");
-                PathBuf::from("./secrets")
+            secrets_dir: secrets_dir_override.unwrap_or_else(|| {
+                config::get_secrets_dir().unwrap_or_else(|_| {
+                    eprintln!("WARN: Unable to determine default secrets directory, using `secrets` directory in the current working directory");
+                    PathBuf::from("./secrets")
+                })
             }),
             environment_vars: std::collections::HashMap::new(),
             bind_address: "127.0.0.1:9001".to_string(),
         }
     } else {
-        config::Config::from_serve(&crate::Serve {
+        let mut cfg = config::Config::from_serve(&crate::Serve {
             component_dir: None,
             transport: Default::default(),
             env_vars: vec![],
@@ -301,7 +310,12 @@ async fn create_lifecycle_manager(component_dir: Option<PathBuf>) -> Result<Life
             disable_builtin_tools: false,
             bind_address: None,
         })
-        .context("Failed to load configuration")?
+        .context("Failed to load configuration")?;
+
+        if let Some(secrets_override) = secrets_dir_override {
+            cfg.secrets_dir = secrets_override;
+        }
+        cfg
     };
 
     // Use unloaded manager for fast CLI startup, but preserve custom secrets dir
@@ -1000,6 +1014,72 @@ async fn main() -> Result<()> {
                         "status": "success",
                         "component_id": component_id,
                         "message": format!("Deleted {} secret(s) from component", keys.len())
+                    });
+
+                    print_result(
+                        &rmcp::model::CallToolResult {
+                            content: Some(vec![rmcp::model::Content::text(
+                                serde_json::to_string_pretty(&result)?,
+                            )]),
+                            structured_content: None,
+                            is_error: None,
+                        },
+                        OutputFormat::Json,
+                    )?;
+                }
+            },
+            Commands::State { command } => match command {
+                commands::StateCommands::Export {
+                    output,
+                    component_dir,
+                    secrets_dir,
+                } => {
+                    let lifecycle_manager = create_lifecycle_manager_with_secrets(
+                        component_dir.clone(),
+                        secrets_dir.clone(),
+                    )
+                    .await?;
+
+                    let state = lifecycle_manager.export_state().await?;
+                    state.save_to_file(output).await?;
+
+                    let result = json!({
+                        "status": "success",
+                        "message": format!("Exported state with {} components to {}", state.components.len(), output.display()),
+                        "version": state.version,
+                        "components_count": state.components.len()
+                    });
+
+                    print_result(
+                        &rmcp::model::CallToolResult {
+                            content: Some(vec![rmcp::model::Content::text(
+                                serde_json::to_string_pretty(&result)?,
+                            )]),
+                            structured_content: None,
+                            is_error: None,
+                        },
+                        OutputFormat::Json,
+                    )?;
+                }
+                commands::StateCommands::Import {
+                    input,
+                    component_dir,
+                    secrets_dir,
+                } => {
+                    let lifecycle_manager = create_lifecycle_manager_with_secrets(
+                        component_dir.clone(),
+                        secrets_dir.clone(),
+                    )
+                    .await?;
+
+                    let state = wassette::WassetteState::load_from_file(input).await?;
+                    lifecycle_manager.import_state(&state).await?;
+
+                    let result = json!({
+                        "status": "success",
+                        "message": format!("Imported state with {} components from {}", state.components.len(), input.display()),
+                        "version": state.version,
+                        "components_count": state.components.len()
                     });
 
                     print_result(

@@ -49,6 +49,11 @@ pub enum Commands {
         #[command(subcommand)]
         command: SecretCommands,
     },
+    /// Manage Wassette state (export/import).
+    State {
+        #[command(subcommand)]
+        command: StateCommands,
+    },
     /// Inspect a WebAssembly component and display its JSON schema (for debugging).
     Inspect {
         /// Component ID to inspect
@@ -383,5 +388,31 @@ pub enum RegistryCommands {
         /// Directory where plugins are stored. Defaults to $XDG_DATA_HOME/wassette/components
         #[arg(long)]
         plugin_dir: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum StateCommands {
+    /// Export the current Wassette state to a file.
+    Export {
+        /// Output file path for the state snapshot (supports .json, .yaml, .yml extensions)
+        output: PathBuf,
+        /// Directory where components are stored. Defaults to $XDG_DATA_HOME/wassette/components
+        #[arg(long)]
+        component_dir: Option<PathBuf>,
+        /// Directory where secrets are stored. Defaults to $XDG_CONFIG_HOME/wassette/secrets
+        #[arg(long)]
+        secrets_dir: Option<PathBuf>,
+    },
+    /// Import Wassette state from a file.
+    Import {
+        /// Input file path for the state snapshot (supports .json, .yaml, .yml extensions)
+        input: PathBuf,
+        /// Directory where components are stored. Defaults to $XDG_DATA_HOME/wassette/components
+        #[arg(long)]
+        component_dir: Option<PathBuf>,
+        /// Directory where secrets are stored. Defaults to $XDG_CONFIG_HOME/wassette/secrets
+        #[arg(long)]
+        secrets_dir: Option<PathBuf>,
     },
 }
