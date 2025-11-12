@@ -26,6 +26,7 @@ allow = [
     "Zlib",
     "Unicode-3.0",
     "CDLA-Permissive-2.0",
+    "OpenSSL", # Required by aws-lc-sys (transitive dep via rustls/aws-lc-rs)
 ]
 confidence-threshold = 0.8
 
