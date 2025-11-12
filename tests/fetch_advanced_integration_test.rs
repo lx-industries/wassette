@@ -466,3 +466,72 @@ async fn test_fetch_advanced_charset_handling() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_fetch_advanced_post_with_body() -> Result<()> {
+    let (manager, _tempdir) = setup_lifecycle_manager().await?;
+    let component_path = build_fetch_component().await?;
+
+    let component_id = manager
+        .load_component(&format!("file://{}", component_path.to_str().unwrap()))
+        .await?
+        .component_id;
+
+    // Grant network permission
+    manager
+        .grant_permission(
+            &component_id,
+            "network",
+            &json!({"host": "httpbin.org"}),
+        )
+        .await?;
+
+    let target_url = "https://httpbin.org/post";
+
+    println!("Testing fetch-advanced POST with body on {target_url}...");
+
+    let test_data = json!({"test": "data", "value": 123});
+    let options = json!({
+        "method": "post",
+        "headers": [
+            {"name": "Content-Type", "value": "application/json"}
+        ],
+        "body": test_data.to_string(),
+        "timeout-secs": 30,
+        "follow-redirects": true,
+        "max-redirects": 10
+    });
+
+    let result = manager
+        .execute_component_call(
+            &component_id,
+            "fetch-advanced",
+            &json!({"url": target_url, "options": options}).to_string(),
+        )
+        .await;
+
+    match result {
+        Ok(response) => {
+            println!("fetch-advanced POST response: {response}");
+            
+            let response_json: serde_json::Value = serde_json::from_str(&response)?;
+            assert!(response_json.get("Ok").is_some(), "Expected Ok response");
+            
+            let response_data = response_json.get("Ok").unwrap();
+            let status = response_data.get("status").and_then(|v| v.as_u64());
+            assert_eq!(status, Some(200), "Expected status 200");
+            
+            let body = response_data.get("body").and_then(|v| v.as_str()).unwrap_or("");
+            // httpbin.org/post echoes back the data we sent
+            assert!(body.contains("test") && body.contains("data"), 
+                   "Expected POST body to be echoed back");
+            
+            println!("✅ fetch-advanced POST with body test passed!");
+        }
+        Err(e) => {
+            panic!("Expected successful fetch-advanced POST call, got error: {e}");
+        }
+    }
+
+    Ok(())
+}
