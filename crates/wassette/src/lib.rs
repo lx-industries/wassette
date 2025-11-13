@@ -38,11 +38,14 @@ mod secrets;
 mod wasistate;
 
 use component_storage::ComponentStorage;
-pub use config::{LifecycleBuilder, LifecycleConfig};
+pub use config::{DeploymentProfile, LifecycleBuilder, LifecycleConfig};
 pub use http::WassetteWasiState;
 use loader::{ComponentResource, DownloadedResource};
 use policy_internal::PolicyManager;
-pub use policy_internal::{PermissionGrantRequest, PermissionRule, PolicyInfo};
+pub use policy_internal::{
+    HeadlessPolicyBackend, InteractivePolicyBackend, PermissionGrantRequest, PermissionRule,
+    PolicyBackend, PolicyInfo,
+};
 use runtime_context::RuntimeContext;
 pub use secrets::SecretsManager;
 use wasistate::WasiState;
@@ -304,6 +307,7 @@ pub struct LifecycleManager {
     oci_client: Arc<oci_wasm::WasmClient>,
     http_client: reqwest::Client,
     secrets_manager: Arc<SecretsManager>,
+    profile: DeploymentProfile,
 }
 
 /// A representation of a loaded component instance. It contains both the base component info and a
@@ -340,7 +344,7 @@ impl LifecycleManager {
     /// Construct a lifecycle manager from an explicit configuration without loading components.
     #[instrument(skip_all, fields(component_dir = %config.component_dir().display()))]
     pub async fn from_config(config: LifecycleConfig) -> Result<Self> {
-        let (component_dir, secrets_dir, environment_vars, http_client, oci_client, _) =
+        let (component_dir, secrets_dir, environment_vars, http_client, oci_client, _, profile) =
             config.into_parts();
 
         let storage =
@@ -354,12 +358,19 @@ impl LifecycleManager {
         let environment_vars = Arc::new(environment_vars);
         let oci_client = Arc::new(oci_wasm::WasmClient::new(oci_client));
 
+        // Create the appropriate policy backend based on profile
+        let policy_backend: Arc<dyn policy_internal::PolicyBackend> = match profile {
+            DeploymentProfile::Interactive => Arc::new(policy_internal::InteractivePolicyBackend),
+            DeploymentProfile::Headless => Arc::new(policy_internal::HeadlessPolicyBackend),
+        };
+
         let policy_manager = PolicyManager::new(
             storage.clone(),
             Arc::clone(&secrets_manager),
             Arc::clone(&environment_vars),
             Arc::clone(&oci_client),
             http_client.clone(),
+            policy_backend,
         );
 
         Ok(Self {
@@ -370,6 +381,7 @@ impl LifecycleManager {
             oci_client,
             http_client,
             secrets_manager,
+            profile,
         })
     }
 
@@ -421,6 +433,12 @@ impl LifecycleManager {
 
     async fn restore_policy_attachment(&self, component_id: &str) -> Result<()> {
         self.policy_manager.restore_from_disk(component_id).await
+    }
+
+    /// Apply policy to a component by loading it from the co-located policy file
+    /// This is useful after provisioning when the policy file is created after component loading
+    pub async fn apply_policy_to_component(&self, component_id: &str) -> Result<()> {
+        self.restore_policy_attachment(component_id).await
     }
 
     async fn resolve_component_resource(&self, uri: &str) -> Result<(String, DownloadedResource)> {
@@ -1300,6 +1318,11 @@ async fn load_components_parallel(
 }
 
 impl LifecycleManager {
+    /// Get the deployment profile
+    pub fn profile(&self) -> &DeploymentProfile {
+        &self.profile
+    }
+
     /// Get the secrets manager
     pub fn secrets_manager(&self) -> &SecretsManager {
         &self.secrets_manager

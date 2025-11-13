@@ -22,6 +22,66 @@ use crate::component_storage::ComponentStorage;
 use crate::loader::{self, PolicyResource};
 use crate::{SecretsManager, WasiStateTemplate};
 
+/// Policy backend error types
+#[derive(Debug, thiserror::Error)]
+pub enum PolicyError {
+    /// Runtime permission grants are not allowed in headless mode
+    #[error("Runtime permission grants are disabled in headless mode. To grant {permission_type} permission to component '{component_id}', update the provisioning manifest.")]
+    HeadlessGrantDenied {
+        component_id: String,
+        permission_type: String,
+    },
+
+    /// Component not found
+    #[error("Component '{0}' not found")]
+    ComponentNotFound(String),
+
+    /// Other policy errors
+    #[error("Policy error: {0}")]
+    Other(#[from] anyhow::Error),
+}
+
+/// Policy backend determines whether runtime grants are permitted
+pub trait PolicyBackend: Send + Sync {
+    /// Check if a runtime permission grant is allowed
+    fn can_grant_runtime(
+        &self,
+        component_id: &str,
+        permission_type: &str,
+    ) -> Result<(), PolicyError>;
+}
+
+/// Interactive mode backend: permits all runtime grants
+pub struct InteractivePolicyBackend;
+
+impl PolicyBackend for InteractivePolicyBackend {
+    fn can_grant_runtime(
+        &self,
+        _component_id: &str,
+        _permission_type: &str,
+    ) -> Result<(), PolicyError> {
+        // Interactive mode allows all runtime grants
+        Ok(())
+    }
+}
+
+/// Headless mode backend: denies all runtime grants
+pub struct HeadlessPolicyBackend;
+
+impl PolicyBackend for HeadlessPolicyBackend {
+    fn can_grant_runtime(
+        &self,
+        component_id: &str,
+        permission_type: &str,
+    ) -> Result<(), PolicyError> {
+        // Headless mode rejects runtime grants with helpful error
+        Err(PolicyError::HeadlessGrantDenied {
+            component_id: component_id.to_string(),
+            permission_type: permission_type.to_string(),
+        })
+    }
+}
+
 /// Granular permission rule types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PermissionRule {
@@ -65,6 +125,7 @@ pub(crate) struct PolicyManager {
     environment_vars: Arc<HashMap<String, String>>,
     oci_client: Arc<WasmClient>,
     http_client: Client,
+    backend: Arc<dyn PolicyBackend>,
 }
 
 /// Information about a policy attached to a component
@@ -89,6 +150,7 @@ impl PolicyManager {
         environment_vars: Arc<HashMap<String, String>>,
         oci_client: Arc<WasmClient>,
         http_client: Client,
+        backend: Arc<dyn PolicyBackend>,
     ) -> Self {
         Self {
             registry: Arc::new(RwLock::new(PolicyRegistry::default())),
@@ -97,6 +159,7 @@ impl PolicyManager {
             environment_vars,
             oci_client,
             http_client,
+            backend,
         }
     }
 
@@ -341,6 +404,11 @@ impl PolicyManager {
         permission_type: &str,
         details: &serde_json::Value,
     ) -> Result<()> {
+        // Check with policy backend before proceeding
+        self.backend
+            .can_grant_runtime(component_id, permission_type)
+            .map_err(|e| anyhow!("{}", e))?;
+
         info!(
             component_id,
             permission_type, "Granting permission to component"

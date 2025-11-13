@@ -9,10 +9,23 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     get_default_secrets_dir, LifecycleManager, DEFAULT_HTTP_TIMEOUT_SECS, DEFAULT_OCI_TIMEOUT_SECS,
 };
+
+/// Deployment mode for the MCP server
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum DeploymentProfile {
+    /// Interactive mode: permits runtime grants, interactive component loading
+    #[default]
+    Interactive,
+    /// Headless mode: declarative-only, fails fast on missing configuration
+    Headless,
+}
 
 /// Fully-specified configuration for constructing a [`LifecycleManager`].
 #[derive(Clone)]
@@ -23,6 +36,7 @@ pub struct LifecycleConfig {
     http_client: reqwest::Client,
     oci_client: oci_client::Client,
     eager_load: bool,
+    profile: DeploymentProfile,
 }
 
 impl LifecycleConfig {
@@ -56,6 +70,11 @@ impl LifecycleConfig {
         self.eager_load
     }
 
+    /// Get the deployment profile (interactive or headless).
+    pub fn profile(&self) -> &DeploymentProfile {
+        &self.profile
+    }
+
     pub(crate) fn into_parts(
         self,
     ) -> (
@@ -65,6 +84,7 @@ impl LifecycleConfig {
         reqwest::Client,
         oci_client::Client,
         bool,
+        DeploymentProfile,
     ) {
         (
             self.component_dir,
@@ -73,6 +93,7 @@ impl LifecycleConfig {
             self.http_client,
             self.oci_client,
             self.eager_load,
+            self.profile,
         )
     }
 }
@@ -86,6 +107,7 @@ pub struct LifecycleBuilder {
     http_client: Option<reqwest::Client>,
     oci_client: Option<oci_client::Client>,
     eager_load: bool,
+    profile: DeploymentProfile,
 }
 
 impl LifecycleBuilder {
@@ -99,6 +121,7 @@ impl LifecycleBuilder {
             http_client: None,
             oci_client: None,
             eager_load: true,
+            profile: DeploymentProfile::default(),
         }
     }
 
@@ -142,6 +165,12 @@ impl LifecycleBuilder {
         self
     }
 
+    /// Set the deployment profile (interactive or headless).
+    pub fn with_profile(mut self, profile: DeploymentProfile) -> Self {
+        self.profile = profile;
+        self
+    }
+
     /// Produce a validated [`LifecycleConfig`] without constructing a manager.
     pub fn build_config(self) -> Result<LifecycleConfig> {
         let component_dir = match self.component_dir.canonicalize() {
@@ -168,6 +197,7 @@ impl LifecycleBuilder {
             http_client,
             oci_client,
             eager_load: self.eager_load,
+            profile: self.profile,
         })
     }
 

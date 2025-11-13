@@ -129,6 +129,11 @@ pub struct Serve {
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub manifest: Option<PathBuf>,
+
+    /// Deployment profile: interactive (default) or headless
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<wassette::DeploymentProfile>,
 }
 
 #[derive(Args, Debug, Clone, Serialize, Deserialize, Default)]

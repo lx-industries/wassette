@@ -4844,6 +4844,7 @@ name = "wassette"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "component2json",
  "etcetera",
  "futures",
@@ -4863,6 +4864,7 @@ dependencies = [
  "temp-env",
  "tempfile",
  "test-log",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-test",
  "tokio-util",
