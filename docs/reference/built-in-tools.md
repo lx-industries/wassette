@@ -4,7 +4,7 @@ Wassette comes with several built-in tools for managing components and their per
 
 | Tool | Description |
 |------|-------------|
-| `load-component` | Dynamically loads a new tool or component from either the filesystem or OCI registries |
+| `load-component` | Dynamically loads a new tool or component from either the filesystem or OCI registries. Optionally, you can specify which tools to load from the component |
 | `unload-component` | Unloads a tool or component |
 | `list-components` | Lists all currently loaded components or tools |
 | `search-components` | Lists all known components that can be fetched and loaded from the component registry |
@@ -23,6 +23,7 @@ Wassette comes with several built-in tools for managing components and their per
 ## load-component
 **Parameters:**
 - `path` (string, required): Path to the component from either filesystem or OCI registries (e.g., `oci://ghcr.io/microsoft/time-server-js:latest` or `/path/to/component.wasm`)
+- `tools` (array of strings, optional): Array of tool names to load from the component. If not specified, all tools will be loaded. This allows you to selectively load only specific tools from a component.
 
 **Returns:**
 ```json
@@ -34,6 +35,23 @@ Wassette comes with several built-in tools for managing components and their per
 ```
 When an existing component is replaced, the `status` value becomes
 `component reloaded successfully`.
+
+**Examples:**
+
+Load all tools from a component:
+```json
+{
+  "path": "oci://ghcr.io/microsoft/fetch-rs:latest"
+}
+```
+
+Load only specific tools from a component:
+```json
+{
+  "path": "oci://ghcr.io/microsoft/fetch-rs:latest",
+  "tools": ["fetch"]
+}
+```
 
 ## unload-component
 **Parameters:**

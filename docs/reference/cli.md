@@ -124,8 +124,18 @@ wassette component load file:///path/to/component.wasm
 wassette component load file://./my-component.wasm
 ```
 
+**Load only specific tools from a component:**
+```bash
+# Load only the 'fetch' tool from the fetch-rs component
+wassette component load oci://ghcr.io/microsoft/fetch-rs:latest --tools fetch
+
+# Load multiple specific tools
+wassette component load file:///path/to/component.wasm --tools tool1,tool2,tool3
+```
+
 **Options:**
 - `--component-dir <PATH>`: Component storage directory
+- `--tools <TOOLS>`: Comma-separated list of tool names to load from the component. If not specified, all tools will be loaded.
 
 ### `wassette component unload`
 

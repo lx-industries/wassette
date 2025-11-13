@@ -274,11 +274,15 @@ async fn main() -> Result<()> {
                 ComponentCommands::Load {
                     path,
                     component_dir,
+                    tools,
                 } => {
                     let component_dir = component_dir.clone().or_else(|| cli.component_dir.clone());
                     let lifecycle_manager = create_lifecycle_manager(component_dir).await?;
                     let mut args = Map::new();
                     args.insert("path".to_string(), json!(path));
+                    if let Some(tools_list) = tools {
+                        args.insert("tools".to_string(), json!(tools_list));
+                    }
                     handle_tool_cli_command(
                         &lifecycle_manager,
                         "load-component",

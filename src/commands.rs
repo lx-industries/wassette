@@ -177,6 +177,9 @@ pub enum ComponentCommands {
         /// Directory where components are stored. Defaults to $XDG_DATA_HOME/wassette/components
         #[arg(long)]
         component_dir: Option<PathBuf>,
+        /// Optional comma-separated list of tool names to load from the component. If not specified, all tools will be loaded.
+        #[arg(long, value_delimiter = ',')]
+        tools: Option<Vec<String>>,
     },
     /// Unload a WebAssembly component.
     Unload {
