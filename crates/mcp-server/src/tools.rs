@@ -219,13 +219,21 @@ fn get_builtin_tools() -> Vec<Tool> {
         Tool {
             name: Cow::Borrowed("load-component"),
             description: Some(Cow::Borrowed(
-                "Dynamically loads a new tool or component from either the filesystem or OCI registries.",
+                "Dynamically loads a new tool or component from either the filesystem or OCI registries. Optionally, you can specify which tools to load from the component.",
             )),
             input_schema: Arc::new(
                 serde_json::from_value(json!({
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string"}
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the component (file://, oci://, or https://)"
+                        },
+                        "tools": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Optional array of tool names to load from the component. If not specified, all tools will be loaded."
+                        }
                     },
                     "required": ["path"]
                 }))

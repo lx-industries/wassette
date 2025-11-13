@@ -458,6 +458,7 @@ impl LifecycleManager {
         &self,
         component_id: &str,
         wasm_path: &Path,
+        tools_filter: Option<&[String]>,
     ) -> Result<ComponentLoadOutcome> {
         let (component, wasm_bytes) = self
             .load_component_optimized(wasm_path, component_id)
@@ -478,7 +479,7 @@ impl LifecycleManager {
         };
 
         // Use package docs if available
-        let tool_metadata = if let Some(ref docs) = package_docs {
+        let mut tool_metadata = if let Some(ref docs) = package_docs {
             component_exports_to_tools_with_docs(
                 &component_instance.component,
                 self.runtime.as_ref(),
@@ -488,6 +489,22 @@ impl LifecycleManager {
         } else {
             component_exports_to_tools(&component_instance.component, self.runtime.as_ref(), true)
         };
+
+        // Filter tools if a filter is provided
+        if let Some(filter) = tools_filter {
+            debug!(
+                component_id = %component_id,
+                filter = ?filter,
+                total_tools = tool_metadata.len(),
+                "Filtering tools for component"
+            );
+            tool_metadata.retain(|tool| filter.contains(&tool.normalized_name));
+            info!(
+                component_id = %component_id,
+                filtered_count = tool_metadata.len(),
+                "Tools filtered successfully"
+            );
+        }
 
         let tool_names: Vec<String> = tool_metadata
             .iter()
@@ -526,13 +543,31 @@ impl LifecycleManager {
     /// component and whether it replaced an existing instance.
     #[instrument(skip(self))]
     pub async fn load_component(&self, uri: &str) -> Result<ComponentLoadOutcome> {
-        debug!(uri, "Loading component");
+        self.load_component_with_tools(uri, None).await
+    }
+
+    /// Loads a new component from the given URI with optional tool filtering.
+    ///
+    /// This URI can be a file path, an OCI reference, or a URL.
+    /// If a component with the given id already exists, it will be updated with the new component.
+    /// The `tools_filter` parameter allows you to specify which tools to load from the component.
+    /// If `None`, all tools will be loaded.
+    ///
+    /// Returns rich [`ComponentLoadOutcome`] information describing the loaded
+    /// component and whether it replaced an existing instance.
+    #[instrument(skip(self))]
+    pub async fn load_component_with_tools(
+        &self,
+        uri: &str,
+        tools_filter: Option<&[String]>,
+    ) -> Result<ComponentLoadOutcome> {
+        debug!(uri, tools_filter = ?tools_filter, "Loading component");
         let (component_id, resource) = self.resolve_component_resource(uri).await?;
         let staged_path = self
             .stage_component_artifact(&component_id, resource)
             .await?;
         let outcome = self
-            .compile_and_register_component(&component_id, &staged_path)
+            .compile_and_register_component(&component_id, &staged_path, tools_filter)
             .await
             .with_context(|| {
                 format!(
@@ -829,7 +864,7 @@ impl LifecycleManager {
             bail!("Component not found: {}", component_id);
         }
 
-        self.compile_and_register_component(component_id, &entry_path)
+        self.compile_and_register_component(component_id, &entry_path, None)
             .await
             .with_context(|| {
                 format!(
@@ -1251,7 +1286,7 @@ impl LifecycleManager {
         }
 
         let start_time = Instant::now();
-        self.compile_and_register_component(&component_id, &entry_path)
+        self.compile_and_register_component(&component_id, &entry_path, None)
             .await
             .with_context(|| {
                 format!(
