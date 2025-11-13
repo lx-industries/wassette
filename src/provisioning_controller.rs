@@ -96,18 +96,49 @@ impl<'a> ProvisioningController<'a> {
 
         // Step 3: Load component using existing lifecycle manager
         // Note: The lifecycle manager will automatically:
-        // - Download the component from the URI
+        // - Download the component from the URI (and cache the bytes)
         // - Compile and cache it
-        // - Load the co-located policy file we just created
         // - Register the component and its tools
-        self.lifecycle_manager
+        let load_outcome = self
+            .lifecycle_manager
             .load_component(&component.uri)
             .await
             .with_context(|| format!("Failed to load component from URI: {}", component.uri))?;
 
-        // Step 4: Verify digest if specified
+        // Step 3.5: Rename temp policy file to proper name now that we have component_id
+        let final_policy_path = self
+            .plugin_dir
+            .join(format!("{}.policy.yaml", load_outcome.component_id));
+        std::fs::rename(&policy_path, &final_policy_path).with_context(|| {
+            format!(
+                "Failed to rename policy file from {} to {}",
+                policy_path.display(),
+                final_policy_path.display()
+            )
+        })?;
+
+        tracing::debug!("Renamed policy file to: {}", final_policy_path.display());
+
+        // Step 4: Apply the policy to the component (force reload)
+        // This ensures the policy is loaded even though the component was just loaded
+        self.lifecycle_manager
+            .apply_policy_to_component(&load_outcome.component_id)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to apply policy to component {}",
+                    load_outcome.component_id
+                )
+            })?;
+
+        tracing::info!(
+            "Applied policy for component: {}",
+            load_outcome.component_id
+        );
+
+        // Step 5: Verify digest if specified (after loading so we have the cached file)
         if let Some(digest) = &component.digest {
-            self.verify_digest(component, digest)
+            self.verify_digest(&load_outcome.component_id, digest)
                 .context("Digest verification failed")?;
         }
 
@@ -185,21 +216,57 @@ impl<'a> ProvisioningController<'a> {
     }
 
     /// Verify component digest (SHA-256)
-    fn verify_digest(&self, component: &ComponentDeclaration, expected_digest: &str) -> Result<()> {
-        // Digest verification is deferred to post-MVP for simplicity
-        // The digest format was validated during manifest validation,
-        // but actual verification requires reading the downloaded component bytes
+    fn verify_digest(&self, component_id: &str, expected_digest: &str) -> Result<()> {
+        use sha2::{Digest, Sha256};
 
-        tracing::warn!(
-            "Digest verification is not yet implemented for component: {}. Expected: {}",
-            component.name.as_deref().unwrap_or(&component.uri),
-            expected_digest
+        // Parse expected format: "sha256:hexstring"
+        let expected = expected_digest
+            .strip_prefix("sha256:")
+            .ok_or_else(|| anyhow::anyhow!("Digest must start with 'sha256:'"))?;
+
+        // Read the component file from the plugin directory
+        let component_path = self.plugin_dir.join(format!("{}.wasm", component_id));
+
+        if !component_path.exists() {
+            bail!(
+                "Component file not found for digest verification: {}",
+                component_path.display()
+            );
+        }
+
+        tracing::debug!(
+            "Verifying digest for component at: {}",
+            component_path.display()
         );
 
-        // TODO: Implement digest verification
-        // 1. Get the component bytes from the downloaded artifact
-        // 2. Compute SHA-256 hash
-        // 3. Compare with expected_digest (strip "sha256:" prefix)
+        // Read the component bytes
+        let component_bytes = std::fs::read(&component_path).with_context(|| {
+            format!(
+                "Failed to read component file for digest verification: {}",
+                component_path.display()
+            )
+        })?;
+
+        // Compute SHA-256 hash
+        let mut hasher = Sha256::new();
+        hasher.update(&component_bytes);
+        let actual = format!("{:x}", hasher.finalize());
+
+        // Compare digests
+        if actual != expected {
+            bail!(
+                "Digest mismatch for component {}: expected sha256:{}, got sha256:{}",
+                component_id,
+                expected,
+                actual
+            );
+        }
+
+        tracing::info!(
+            "Digest verification passed for component: {} (sha256:{})",
+            component_id,
+            expected
+        );
 
         Ok(())
     }

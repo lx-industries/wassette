@@ -103,6 +103,7 @@ pub async fn create_lifecycle_manager(component_dir: Option<PathBuf>) -> Result<
             disable_builtin_tools: false,
             bind_address: None,
             manifest: None,
+            profile: None,
         })
         .context("Failed to load configuration")?
     };

@@ -80,6 +80,22 @@ async fn main() -> Result<()> {
                 let config =
                     config::Config::from_serve(cfg).context("Failed to load configuration")?;
 
+                // Validate headless mode requirements
+                if let Some(wassette::DeploymentProfile::Headless) = cfg.profile {
+                    if cfg.manifest.is_none() {
+                        anyhow::bail!(
+                            "Headless deployment profile requires --manifest flag with path to provisioning manifest"
+                        );
+                    }
+                }
+
+                // Validate manifest exists if provided
+                if let Some(ref manifest_path) = cfg.manifest {
+                    if !manifest_path.exists() {
+                        anyhow::bail!("Manifest file not found: {}", manifest_path.display());
+                    }
+                }
+
                 // Parse and validate manifest if provided
                 let manifest = if let Some(manifest_path) = &cfg.manifest {
                     let m = manifest::ProvisioningManifest::from_file(manifest_path)
@@ -112,14 +128,18 @@ async fn main() -> Result<()> {
                 // Keep a clone of component_dir for provisioning
                 let component_dir_path = component_dir.clone();
 
-                let lifecycle_manager = LifecycleManager::builder(component_dir)
+                // Determine the profile to use
+                let profile = cfg.profile.clone().unwrap_or_default();
+
+                let builder = LifecycleManager::builder(component_dir)
                     .with_environment_vars(environment_vars)
                     .with_secrets_dir(secrets_dir)
                     .with_oci_client(oci_client::Client::default())
                     .with_http_client(reqwest::Client::default())
                     .with_eager_loading(false)
-                    .build()
-                    .await?;
+                    .with_profile(profile);
+
+                let lifecycle_manager = builder.build().await?;
 
                 // Provision components from manifest if provided
                 if let Some(manifest) = &manifest {
