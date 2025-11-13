@@ -233,23 +233,26 @@ async fn test_ipc_server_graceful_shutdown() -> Result<()> {
     drop(stream);
 
     // Shutdown the server by aborting the task
+    // Note: abort() doesn't run the cleanup code, so socket may remain
     server_handle.abort();
 
-    // Give it time to clean up
+    // Give it time to process the abort
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // The socket might still exist immediately after abort, but future connections should fail
-    // Try to connect and expect failure
+    // With abort(), the cleanup code doesn't run, so the socket file may still exist
+    // But the server should no longer be accepting connections
+    // Future connections should fail or timeout
     let connection_result = timeout(
         Duration::from_millis(500),
         tokio::net::UnixStream::connect(&socket_path),
     )
     .await;
 
-    // Either the socket was removed or connection times out/fails
+    // Connection should timeout or fail since server is not running
+    // Note: The socket file may exist but no server is listening
     assert!(
         connection_result.is_err() || connection_result.unwrap().is_err(),
-        "Connection should fail after server shutdown"
+        "Connection should fail or timeout after server shutdown"
     );
 
     Ok(())

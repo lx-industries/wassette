@@ -7,6 +7,9 @@
 //! to handle dynamic secret provisioning and revocation through a Unix domain
 //! socket (Unix/macOS) or named pipe (Windows).
 //!
+//! **Note:** The Windows implementation is currently a stub and not yet functional.
+//! Only Unix/macOS platforms are supported at this time.
+//!
 //! # Security
 //! - Peer authentication ensures only same-user connections are allowed
 //! - Socket/pipe permissions are set to owner-only (0700/0600)
@@ -194,7 +197,29 @@ async fn handle_request(
     request: IpcRequest,
     secrets_manager: &SecretsManager,
 ) -> Result<IpcResponse> {
-    debug!("Handling IPC request: {:?}", request);
+    match &request {
+        IpcRequest::Ping => debug!("Handling IPC request: Ping"),
+        IpcRequest::SetSecret {
+            component_id, key, ..
+        } => {
+            debug!(
+                "Handling IPC request: SetSecret for component: {}, key: {}",
+                component_id, key
+            )
+        }
+        IpcRequest::DeleteSecret { component_id, key } => {
+            debug!(
+                "Handling IPC request: DeleteSecret for component: {}, key: {}",
+                component_id, key
+            )
+        }
+        IpcRequest::ListSecrets { component_id } => {
+            debug!(
+                "Handling IPC request: ListSecrets for component: {}",
+                component_id
+            )
+        }
+    }
 
     match request {
         IpcRequest::Ping => Ok(IpcResponse::success("pong")),
@@ -296,6 +321,7 @@ mod unix_impl {
     }
 
     /// Verify that the peer has the same uid/gid as the server
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn verify_peer_identity(stream: &tokio::net::UnixStream) -> Result<bool> {
         let (peer_uid, peer_gid) = get_peer_creds(stream)?;
         let server_uid = unsafe { libc::getuid() };
@@ -354,7 +380,14 @@ mod unix_impl {
                         Err(e) => {
                             error!("Failed to parse request: {}", e);
                             let response = IpcResponse::error(format!("Invalid request: {}", e));
-                            let response_json = serde_json::to_string(&response).unwrap();
+                            let response_json = match serde_json::to_string(&response) {
+                                Ok(json) => json,
+                                Err(e) => {
+                                    error!("Failed to serialize error response: {}", e);
+                                    r#"{"status":"error","message":"Internal server error"}"#
+                                        .to_string()
+                                }
+                            };
                             if let Err(e) =
                                 reader.get_mut().write_all(response_json.as_bytes()).await
                             {
@@ -375,7 +408,18 @@ mod unix_impl {
                         }
                     };
 
-                    let response_json = serde_json::to_string(&response).unwrap();
+                    let response_json = match serde_json::to_string(&response) {
+                        Ok(json) => json,
+                        Err(e) => {
+                            error!("Failed to serialize response: {}", e);
+                            let error_response =
+                                IpcResponse::error("Internal server error".to_string());
+                            serde_json::to_string(&error_response).unwrap_or_else(|_| {
+                                r#"{"status":"error","message":"Internal server error"}"#
+                                    .to_string()
+                            })
+                        }
+                    };
                     if let Err(e) = reader.get_mut().write_all(response_json.as_bytes()).await {
                         error!("Failed to write response: {}", e);
                         break;
@@ -509,7 +553,7 @@ mod tests {
         };
         let json = serde_json::to_string(&request).unwrap();
         let parsed: IpcRequest = serde_json::from_str(&json).unwrap();
-        matches!(parsed, IpcRequest::SetSecret { .. });
+        assert!(matches!(parsed, IpcRequest::SetSecret { .. }));
     }
 
     #[tokio::test]
@@ -542,6 +586,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let secrets_dir = temp_dir.path().join("secrets");
         let secrets_manager = SecretsManager::new(secrets_dir);
+        secrets_manager.ensure_secrets_dir().await.unwrap();
 
         let request = IpcRequest::SetSecret {
             component_id: "test-component".to_string(),
@@ -565,6 +610,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let secrets_dir = temp_dir.path().join("secrets");
         let secrets_manager = SecretsManager::new(secrets_dir);
+        secrets_manager.ensure_secrets_dir().await.unwrap();
 
         // Set some secrets first
         secrets_manager
@@ -596,6 +642,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let secrets_dir = temp_dir.path().join("secrets");
         let secrets_manager = SecretsManager::new(secrets_dir);
+        secrets_manager.ensure_secrets_dir().await.unwrap();
 
         // Set a secret first
         secrets_manager

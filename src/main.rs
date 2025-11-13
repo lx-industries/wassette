@@ -153,13 +153,26 @@ async fn main() -> Result<()> {
                 let mut ipc_server = IpcServer::new(ipc_config);
 
                 // Spawn IPC server in background
+                let ipc_socket_path_clone = ipc_socket_path.clone();
                 let _ipc_handle = tokio::spawn(async move {
-                    if let Err(e) = ipc_server.start().await {
-                        tracing::error!("IPC server failed: {}", e);
+                    match ipc_server.start().await {
+                        Ok(_) => {
+                            tracing::info!(
+                                "IPC server stopped gracefully on {}",
+                                ipc_socket_path_clone.display()
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "IPC server failed on {}: {}",
+                                ipc_socket_path_clone.display(),
+                                e
+                            );
+                        }
                     }
                 });
 
-                tracing::info!("IPC server started on {}", ipc_socket_path.display());
+                tracing::info!("Starting IPC server on {}", ipc_socket_path.display());
 
                 // Start background component loading
                 let server_clone = server.clone();
