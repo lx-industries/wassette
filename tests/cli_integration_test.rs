@@ -726,7 +726,9 @@ async fn test_cli_inspect_component() -> Result<()> {
         .expect("Component ID should be in load output");
 
     // Now inspect the loaded component by ID
-    let (stdout, stderr, exit_code) = ctx.run_command(&["inspect", component_id]).await?;
+    let (stdout, stderr, exit_code) = ctx
+        .run_command(&["inspect", "schema", component_id])
+        .await?;
 
     assert_eq!(exit_code, 0, "Inspect command failed with stderr: {stderr}");
 
@@ -753,7 +755,7 @@ async fn test_cli_inspect_invalid_component_id() -> Result<()> {
 
     // Try to inspect a non-existent component
     let (_, stderr, exit_code) = ctx
-        .run_command(&["inspect", "nonexistent-component"])
+        .run_command(&["inspect", "schema", "nonexistent-component"])
         .await?;
 
     assert_ne!(exit_code, 0, "Command should fail for invalid component ID");
@@ -897,6 +899,205 @@ async fn test_cli_autocomplete_includes_all_commands() -> Result<()> {
             cmd
         );
     }
+
+    Ok(())
+}
+
+#[test(tokio::test)]
+async fn test_cli_inspect_call_component() -> Result<()> {
+    let ctx = CliTestContext::new().await?;
+    let component_path = build_fetch_component().await?;
+
+    // First, load the component
+    let file_uri = format!("file://{}", component_path.display());
+    let (load_stdout, load_stderr, load_exit_code) =
+        ctx.run_command(&["component", "load", &file_uri]).await?;
+
+    assert_eq!(
+        load_exit_code, 0,
+        "Load command failed with stderr: {load_stderr}"
+    );
+
+    let load_output: Value = ctx.parse_json_output(&load_stdout)?;
+    let component_id = load_output["id"]
+        .as_str()
+        .expect("Component ID should be in load output");
+
+    // Grant network permission for the component to call example.com
+    let (_grant_stdout, grant_stderr, grant_exit_code) = ctx
+        .run_command(&[
+            "permission",
+            "grant",
+            "network",
+            component_id,
+            "example.com",
+        ])
+        .await?;
+
+    assert_eq!(
+        grant_exit_code, 0,
+        "Grant network permission failed with stderr: {grant_stderr}"
+    );
+
+    // Now call the component with arguments
+    let (stdout, stderr, exit_code) = ctx
+        .run_command(&[
+            "inspect",
+            "call",
+            component_id,
+            "--arg",
+            "url=https://example.com",
+        ])
+        .await?;
+
+    assert_eq!(
+        exit_code, 0,
+        "Inspect call command failed with stderr: {stderr}"
+    );
+
+    // Verify the output contains expected result
+    let result: Value = ctx.parse_json_output(&stdout)?;
+    assert!(
+        result.is_object() || result.is_string(),
+        "Result should be a valid JSON object or string"
+    );
+
+    Ok(())
+}
+
+#[test(tokio::test)]
+async fn test_cli_inspect_call_with_multiple_args() -> Result<()> {
+    let ctx = CliTestContext::new().await?;
+    let component_path = build_fetch_component().await?;
+
+    // First, load the component
+    let file_uri = format!("file://{}", component_path.display());
+    let (load_stdout, load_stderr, load_exit_code) =
+        ctx.run_command(&["component", "load", &file_uri]).await?;
+
+    assert_eq!(
+        load_exit_code, 0,
+        "Load command failed with stderr: {load_stderr}"
+    );
+
+    let load_output: Value = ctx.parse_json_output(&load_stdout)?;
+    let component_id = load_output["id"]
+        .as_str()
+        .expect("Component ID should be in load output");
+
+    // Grant network permission
+    let (_grant_stdout, grant_stderr, grant_exit_code) = ctx
+        .run_command(&[
+            "permission",
+            "grant",
+            "network",
+            component_id,
+            "httpbin.org",
+        ])
+        .await?;
+
+    assert_eq!(
+        grant_exit_code, 0,
+        "Grant network permission failed with stderr: {grant_stderr}"
+    );
+
+    // Now call the component with multiple arguments
+    let (stdout, stderr, exit_code) = ctx
+        .run_command(&[
+            "inspect",
+            "call",
+            component_id,
+            "--arg",
+            "url=https://httpbin.org/get",
+            "--arg",
+            "method=GET",
+        ])
+        .await?;
+
+    assert_eq!(
+        exit_code, 0,
+        "Inspect call with multiple args failed with stderr: {stderr}"
+    );
+
+    // Verify the output is valid JSON
+    let _result: Value = ctx.parse_json_output(&stdout)?;
+
+    Ok(())
+}
+
+#[test(tokio::test)]
+async fn test_cli_inspect_call_with_policy_file() -> Result<()> {
+    let ctx = CliTestContext::new().await?;
+    let component_path = build_fetch_component().await?;
+
+    // First, load the component
+    let file_uri = format!("file://{}", component_path.display());
+    let (load_stdout, load_stderr, load_exit_code) =
+        ctx.run_command(&["component", "load", &file_uri]).await?;
+
+    assert_eq!(
+        load_exit_code, 0,
+        "Load command failed with stderr: {load_stderr}"
+    );
+
+    let load_output: Value = ctx.parse_json_output(&load_stdout)?;
+    let component_id = load_output["id"]
+        .as_str()
+        .expect("Component ID should be in load output");
+
+    // Create a temporary policy file
+    let policy_content = r#"
+permissions:
+  network:
+    - host: "example.com"
+"#;
+    let policy_file = ctx.temp_dir.path().join("test-policy.yaml");
+    std::fs::write(&policy_file, policy_content)?;
+
+    // Now call the component with the policy file
+    let (stdout, stderr, exit_code) = ctx
+        .run_command(&[
+            "inspect",
+            "call",
+            component_id,
+            "--arg",
+            "url=https://example.com",
+            "--policy-file",
+            policy_file.to_str().unwrap(),
+        ])
+        .await?;
+
+    assert_eq!(
+        exit_code, 0,
+        "Inspect call with policy file failed with stderr: {stderr}"
+    );
+
+    // Verify the output is valid JSON
+    let _result: Value = ctx.parse_json_output(&stdout)?;
+
+    Ok(())
+}
+
+#[test(tokio::test)]
+async fn test_cli_inspect_call_invalid_component() -> Result<()> {
+    let ctx = CliTestContext::new().await?;
+
+    // Try to call a non-existent component
+    let (_, stderr, exit_code) = ctx
+        .run_command(&[
+            "inspect",
+            "call",
+            "nonexistent-component",
+            "--arg",
+            "test=value",
+        ])
+        .await?;
+
+    assert_ne!(exit_code, 0, "Command should fail for invalid component ID");
+    assert!(
+        stderr.contains("not found") || stderr.contains("Error"),
+        "Error message should indicate component not found"
+    );
 
     Ok(())
 }

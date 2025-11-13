@@ -69,13 +69,10 @@ pub enum Commands {
         #[command(subcommand)]
         command: SecretCommands,
     },
-    /// Inspect a WebAssembly component and display its JSON schema (for debugging).
+    /// Inspect a WebAssembly component (display schema or call component).
     Inspect {
-        /// Component ID to inspect
-        component_id: String,
-        /// Directory where components are stored. Defaults to $XDG_DATA_HOME/wassette/components
-        #[arg(long)]
-        component_dir: Option<PathBuf>,
+        #[command(subcommand)]
+        command: InspectCommands,
     },
     /// Manage tools (list, read, invoke).
     Tool {
@@ -426,6 +423,35 @@ pub enum ToolCommands {
         /// Arguments in JSON format (e.g., '{"key": "value"}')
         #[arg(long)]
         args: Option<String>,
+        /// Directory where components are stored. Defaults to $XDG_DATA_HOME/wassette/components
+        #[arg(long)]
+        component_dir: Option<PathBuf>,
+        /// Output format
+        #[arg(short = 'o', long = "output-format", default_value = "json")]
+        output_format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum InspectCommands {
+    /// Display JSON schema of a component.
+    Schema {
+        /// Component ID to inspect
+        component_id: String,
+        /// Directory where components are stored. Defaults to $XDG_DATA_HOME/wassette/components
+        #[arg(long)]
+        component_dir: Option<PathBuf>,
+    },
+    /// Call a component with arguments.
+    Call {
+        /// Component ID to call
+        component_id: String,
+        /// Arguments in KEY=VALUE format. Can be specified multiple times.
+        #[arg(long = "arg", value_parser = crate::parse_env_var)]
+        args: Vec<(String, String)>,
+        /// Path to policy file for this component
+        #[arg(long)]
+        policy_file: Option<PathBuf>,
         /// Directory where components are stored. Defaults to $XDG_DATA_HOME/wassette/components
         #[arg(long)]
         component_dir: Option<PathBuf>,

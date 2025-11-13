@@ -13,7 +13,7 @@ use rmcp::service::serve_server;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
 use rmcp::transport::{stdio as stdio_transport, SseServer};
-use serde_json::{json, Map};
+use serde_json::{json, Map, Value};
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
@@ -31,8 +31,9 @@ mod utils;
 
 use cli_handlers::{create_lifecycle_manager, handle_tool_cli_command};
 use commands::{
-    Cli, Commands, ComponentCommands, GrantPermissionCommands, PermissionCommands, PolicyCommands,
-    RegistryCommands, RevokePermissionCommands, SecretCommands, Shell, ToolCommands, Transport,
+    Cli, Commands, ComponentCommands, GrantPermissionCommands, InspectCommands, PermissionCommands,
+    PolicyCommands, RegistryCommands, RevokePermissionCommands, SecretCommands, Shell,
+    ToolCommands, Transport,
 };
 use format::{print_result, OutputFormat};
 use server::McpServer;
@@ -716,50 +717,253 @@ async fn main() -> Result<()> {
                     }
                 }
             },
-            Commands::Inspect {
-                component_id,
-                component_dir,
-            } => {
-                let component_dir = component_dir.clone().or_else(|| cli.component_dir.clone());
-                let lifecycle_manager = create_lifecycle_manager(component_dir).await?;
+            Commands::Inspect { command } => match command {
+                InspectCommands::Schema {
+                    component_id,
+                    component_dir,
+                } => {
+                    let component_dir = component_dir.clone().or_else(|| cli.component_dir.clone());
+                    let lifecycle_manager = create_lifecycle_manager(component_dir).await?;
 
-                // Get the component schema from the lifecycle manager
-                let schema = lifecycle_manager
-                    .get_component_schema(component_id)
-                    .await
-                    .context(format!(
-                    "Component '{}' not found. Use 'component load' to load the component first.",
-                    component_id
-                ))?;
+                    // Get the component schema from the lifecycle manager
+                    let schema = lifecycle_manager
+                        .get_component_schema(component_id)
+                        .await
+                        .context(format!(
+                        "Component '{}' not found. Use 'component load' to load the component first.",
+                        component_id
+                    ))?;
 
-                // Display tools information
-                if let Some(arr) = schema["tools"].as_array() {
-                    for t in arr {
-                        // The tool info is nested in properties.result
-                        let tool_info = &t["properties"]["result"];
-                        let name = tool_info["name"]
-                            .as_str()
-                            .unwrap_or("<unnamed>")
-                            .to_string();
-                        let description: Option<String> =
-                            tool_info["description"].as_str().map(|s| s.to_string());
-                        let input_schema = tool_info["inputSchema"].clone();
-                        let output_schema = tool_info["outputSchema"].clone();
+                    // Display tools information
+                    if let Some(arr) = schema["tools"].as_array() {
+                        for t in arr {
+                            // The tool info is nested in properties.result
+                            let tool_info = &t["properties"]["result"];
+                            let name = tool_info["name"]
+                                .as_str()
+                                .unwrap_or("<unnamed>")
+                                .to_string();
+                            let description: Option<String> =
+                                tool_info["description"].as_str().map(|s| s.to_string());
+                            let input_schema = tool_info["inputSchema"].clone();
+                            let output_schema = tool_info["outputSchema"].clone();
 
-                        println!("{name}, {description:?}");
-                        println!(
-                            "input schema: {}",
-                            serde_json::to_string_pretty(&input_schema)?
-                        );
-                        println!(
-                            "output schema: {}",
-                            serde_json::to_string_pretty(&output_schema)?
-                        );
+                            println!("{name}, {description:?}");
+                            println!(
+                                "input schema: {}",
+                                serde_json::to_string_pretty(&input_schema)?
+                            );
+                            println!(
+                                "output schema: {}",
+                                serde_json::to_string_pretty(&output_schema)?
+                            );
+                        }
+                    } else {
+                        println!("No tools found in component");
                     }
-                } else {
-                    println!("No tools found in component");
                 }
-            }
+                InspectCommands::Call {
+                    component_id,
+                    args,
+                    policy_file,
+                    component_dir,
+                    output_format,
+                } => {
+                    let component_dir = component_dir.clone().or_else(|| cli.component_dir.clone());
+                    let lifecycle_manager = create_lifecycle_manager(component_dir).await?;
+
+                    // Ensure the component is loaded in memory first
+                    lifecycle_manager
+                        .ensure_component_loaded(component_id)
+                        .await
+                        .context("Failed to load component into memory")?;
+
+                    // Apply policy file if provided
+                    if let Some(policy_path) = policy_file {
+                        // Read and apply the policy file
+                        let policy_content = std::fs::read_to_string(policy_path)
+                            .context("Failed to read policy file")?;
+
+                        // Parse the policy as YAML and convert to JSON for the grant-* tools
+                        let policy: serde_json::Value = serde_yaml::from_str(&policy_content)
+                            .context("Failed to parse policy file as YAML")?;
+
+                        // Apply the policy to the component
+                        // This is a simplified version - the full implementation would need to
+                        // parse the policy structure and call the appropriate grant-* functions
+                        tracing::info!("Applying policy from file to component {}", component_id);
+
+                        // For now, we'll use the existing policy application logic
+                        // The policy should contain permissions like storage, network, etc.
+                        if let Some(permissions) = policy.get("permissions") {
+                            // Apply storage permissions
+                            if let Some(storage) =
+                                permissions.get("storage").and_then(|v| v.as_array())
+                            {
+                                for s in storage {
+                                    let uri =
+                                        s.get("uri").and_then(|v| v.as_str()).ok_or_else(|| {
+                                            anyhow::anyhow!("Storage permission missing 'uri'")
+                                        })?;
+                                    let access = s
+                                        .get("access")
+                                        .and_then(|v| v.as_array())
+                                        .ok_or_else(|| {
+                                            anyhow::anyhow!("Storage permission missing 'access'")
+                                        })?
+                                        .iter()
+                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                        .collect::<Vec<_>>();
+
+                                    lifecycle_manager
+                                        .grant_permission(
+                                            component_id,
+                                            "storage",
+                                            &json!({
+                                                "uri": uri,
+                                                "access": access
+                                            }),
+                                        )
+                                        .await?;
+                                }
+                            }
+
+                            // Apply network permissions
+                            if let Some(network) =
+                                permissions.get("network").and_then(|v| v.as_array())
+                            {
+                                for n in network {
+                                    let host = n.get("host").and_then(|v| v.as_str()).ok_or_else(
+                                        || anyhow::anyhow!("Network permission missing 'host'"),
+                                    )?;
+
+                                    lifecycle_manager
+                                        .grant_permission(
+                                            component_id,
+                                            "network",
+                                            &json!({
+                                                "host": host
+                                            }),
+                                        )
+                                        .await?;
+                                }
+                            }
+
+                            // Apply environment variable permissions
+                            if let Some(env_vars) = permissions
+                                .get("environment-variables")
+                                .and_then(|v| v.as_array())
+                            {
+                                for e in env_vars {
+                                    let key =
+                                        e.get("key").and_then(|v| v.as_str()).ok_or_else(|| {
+                                            anyhow::anyhow!(
+                                                "Environment variable permission missing 'key'"
+                                            )
+                                        })?;
+
+                                    lifecycle_manager
+                                        .grant_permission(
+                                            component_id,
+                                            "environment-variable",
+                                            &json!({
+                                                "key": key
+                                            }),
+                                        )
+                                        .await?;
+                                }
+                            }
+
+                            // Apply memory permissions
+                            if let Some(memory) = permissions.get("memory") {
+                                if let Some(limit) = memory.get("limit").and_then(|v| v.as_str()) {
+                                    lifecycle_manager
+                                        .grant_permission(
+                                            component_id,
+                                            "memory",
+                                            &json!({
+                                                "resources": {
+                                                    "limits": {
+                                                        "memory": limit
+                                                    }
+                                                }
+                                            }),
+                                        )
+                                        .await?;
+                                }
+                            }
+                        }
+                    }
+
+                    // Get the component schema to find the tool name
+                    let schema = lifecycle_manager
+                        .get_component_schema(component_id)
+                        .await
+                        .context(format!(
+                            "Component '{}' not found. Use 'component load' to load the component first.",
+                            component_id
+                        ))?;
+
+                    // Find the first tool in the component
+                    let tool_name = if let Some(arr) = schema["tools"].as_array() {
+                        if let Some(first_tool) = arr.first() {
+                            // Try nested structure first (live component schema)
+                            let tool_info = if first_tool.get("properties").is_some() {
+                                &first_tool["properties"]["result"]
+                            } else {
+                                // Fallback to flat structure (metadata schema)
+                                first_tool
+                            };
+
+                            tool_info["name"]
+                                .as_str()
+                                .ok_or_else(|| anyhow::anyhow!("Tool name not found in schema"))?
+                                .to_string()
+                        } else {
+                            bail!("No tools found in component");
+                        }
+                    } else {
+                        bail!("No tools found in component");
+                    };
+
+                    // Convert args to JSON
+                    let mut arguments = Map::new();
+                    for (key, value) in args {
+                        // Try to parse value as JSON, otherwise treat as string
+                        let json_value: Value = serde_json::from_str(value)
+                            .unwrap_or_else(|_| Value::String(value.clone()));
+                        arguments.insert(key.clone(), json_value);
+                    }
+
+                    // Call the component
+                    let parameters_json = serde_json::to_string(&arguments)?;
+                    let result = lifecycle_manager
+                        .execute_component_call(component_id, &tool_name, &parameters_json)
+                        .await;
+
+                    match result {
+                        Ok(result_str) => {
+                            let result_value: Value = serde_json::from_str(&result_str)
+                                .unwrap_or_else(|_| Value::String(result_str.clone()));
+
+                            print_result(
+                                &rmcp::model::CallToolResult {
+                                    content: Some(vec![rmcp::model::Content::text(
+                                        serde_json::to_string_pretty(&result_value)?,
+                                    )]),
+                                    structured_content: None,
+                                    is_error: Some(false),
+                                },
+                                *output_format,
+                            )?;
+                        }
+                        Err(e) => {
+                            eprintln!("Error calling component '{}': {}", component_id, e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            },
             Commands::Registry { command } => match command {
                 RegistryCommands::Search {
                     query,
