@@ -147,6 +147,7 @@ mod tests {
             disable_builtin_tools: false,
             bind_address: None,
             manifest: None,
+            profile: None,
         }
     }
 
@@ -159,6 +160,7 @@ mod tests {
             disable_builtin_tools: false,
             bind_address: None,
             manifest: None,
+            profile: None,
         }
     }
 
@@ -371,6 +373,7 @@ bind_address = "0.0.0.0:8080"
             disable_builtin_tools: false,
             bind_address: Some("192.168.1.100:9090".to_string()),
             manifest: None,
+            profile: None,
         };
 
         let config =
@@ -415,6 +418,7 @@ bind_address = "0.0.0.0:8080"
                 disable_builtin_tools: false,
                 bind_address: Some("192.168.1.100:9090".to_string()),
                 manifest: None,
+                profile: None,
             };
 
             let config = Config::new_from_path(&serve_config, &config_file)

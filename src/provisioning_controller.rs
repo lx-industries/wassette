@@ -109,13 +109,15 @@ impl<'a> ProvisioningController<'a> {
         let final_policy_path = self
             .plugin_dir
             .join(format!("{}.policy.yaml", load_outcome.component_id));
-        std::fs::rename(&policy_path, &final_policy_path).with_context(|| {
-            format!(
-                "Failed to rename policy file from {} to {}",
-                policy_path.display(),
-                final_policy_path.display()
-            )
-        })?;
+        tokio::fs::rename(&policy_path, &final_policy_path)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to rename policy file from {} to {}",
+                    policy_path.display(),
+                    final_policy_path.display()
+                )
+            })?;
 
         tracing::debug!("Renamed policy file to: {}", final_policy_path.display());
 
@@ -139,6 +141,7 @@ impl<'a> ProvisioningController<'a> {
         // Step 5: Verify digest if specified (after loading so we have the cached file)
         if let Some(digest) = &component.digest {
             self.verify_digest(&load_outcome.component_id, digest)
+                .await
                 .context("Digest verification failed")?;
         }
 
@@ -216,7 +219,7 @@ impl<'a> ProvisioningController<'a> {
     }
 
     /// Verify component digest (SHA-256)
-    fn verify_digest(&self, component_id: &str, expected_digest: &str) -> Result<()> {
+    async fn verify_digest(&self, component_id: &str, expected_digest: &str) -> Result<()> {
         use sha2::{Digest, Sha256};
 
         // Parse expected format: "sha256:hexstring"
@@ -240,7 +243,7 @@ impl<'a> ProvisioningController<'a> {
         );
 
         // Read the component bytes
-        let component_bytes = std::fs::read(&component_path).with_context(|| {
+        let component_bytes = tokio::fs::read(&component_path).await.with_context(|| {
             format!(
                 "Failed to read component file for digest verification: {}",
                 component_path.display()

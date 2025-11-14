@@ -1048,7 +1048,7 @@ async fn test_headless_list_components() -> Result<()> {
     // so we only have 1 component registered
     let components = manager.list_components().await;
     assert!(
-        components.len() >= 1,
+        !components.is_empty(),
         "Should have at least 1 component loaded"
     );
 
