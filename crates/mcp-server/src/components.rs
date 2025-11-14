@@ -8,10 +8,19 @@ use anyhow::Result;
 use futures::stream::{self, StreamExt};
 use rmcp::model::{CallToolRequestParam, CallToolResult, Content, Tool};
 use rmcp::{Peer, RoleServer};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use tracing::{debug, error, info, instrument};
 use wassette::schema::{canonicalize_output_schema, ensure_structured_result};
 use wassette::{ComponentLoadOutcome, LifecycleManager, LoadResult};
+
+/// Extract tools filter from request arguments
+fn extract_tools_filter(args: &Map<String, Value>) -> Option<Vec<String>> {
+    args.get("tools").and_then(|v| v.as_array()).map(|arr| {
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect::<Vec<String>>()
+    })
+}
 
 #[instrument(skip(lifecycle_manager))]
 pub(crate) async fn get_component_tools(lifecycle_manager: &LifecycleManager) -> Result<Vec<Tool>> {
@@ -53,11 +62,7 @@ pub(crate) async fn handle_load_component(
         .ok_or_else(|| anyhow::anyhow!("Missing required argument: 'path'"))?;
 
     // Extract optional tools filter
-    let tools_filter = args.get("tools").and_then(|v| v.as_array()).map(|arr| {
-        arr.iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect::<Vec<String>>()
-    });
+    let tools_filter = extract_tools_filter(&args);
 
     debug!(
         path = %path,
@@ -407,11 +412,7 @@ pub async fn handle_load_component_cli(
         .ok_or_else(|| anyhow::anyhow!("Missing required argument: 'path'"))?;
 
     // Extract optional tools filter
-    let tools_filter = args.get("tools").and_then(|v| v.as_array()).map(|arr| {
-        arr.iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect::<Vec<String>>()
-    });
+    let tools_filter = extract_tools_filter(&args);
 
     info!(path, tools_filter = ?tools_filter, "Loading component (CLI mode)");
 

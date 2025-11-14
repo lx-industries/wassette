@@ -3,8 +3,22 @@
 
 //! Integration tests for selective tool loading
 
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use wassette::LifecycleManager;
+
+/// Helper function to get the path to the fetch-rs test component
+fn get_fetch_component_path() -> Result<PathBuf> {
+    let project_root = std::env::current_dir().context("Failed to get current directory")?;
+    Ok(project_root
+        .join("examples")
+        .join("fetch-rs")
+        .join("target")
+        .join("wasm32-wasip2")
+        .join("release")
+        .join("fetch_rs.wasm"))
+}
 
 #[tokio::test]
 async fn test_selective_tool_loading() -> Result<()> {
@@ -12,15 +26,7 @@ async fn test_selective_tool_loading() -> Result<()> {
     let tempdir = tempfile::tempdir()?;
     let lifecycle_manager = LifecycleManager::new(&tempdir).await?;
 
-    // Build the fetch-rs component
-    let project_root = std::env::current_dir().context("Failed to get current directory")?;
-    let fetch_component_path = project_root
-        .join("examples")
-        .join("fetch-rs")
-        .join("target")
-        .join("wasm32-wasip2")
-        .join("release")
-        .join("fetch_rs.wasm");
+    let fetch_component_path = get_fetch_component_path()?;
 
     // Load component with only specific tools
     let tools_to_load = vec!["fetch".to_string()];
@@ -83,15 +89,7 @@ async fn test_load_all_tools_when_no_filter() -> Result<()> {
     let tempdir = tempfile::tempdir()?;
     let lifecycle_manager = LifecycleManager::new(&tempdir).await?;
 
-    // Build the fetch-rs component
-    let project_root = std::env::current_dir().context("Failed to get current directory")?;
-    let fetch_component_path = project_root
-        .join("examples")
-        .join("fetch-rs")
-        .join("target")
-        .join("wasm32-wasip2")
-        .join("release")
-        .join("fetch_rs.wasm");
+    let fetch_component_path = get_fetch_component_path()?;
 
     // Load component without filter (should load all tools)
     let outcome = lifecycle_manager
@@ -114,15 +112,7 @@ async fn test_empty_tools_filter() -> Result<()> {
     let tempdir = tempfile::tempdir()?;
     let lifecycle_manager = LifecycleManager::new(&tempdir).await?;
 
-    // Build the fetch-rs component
-    let project_root = std::env::current_dir().context("Failed to get current directory")?;
-    let fetch_component_path = project_root
-        .join("examples")
-        .join("fetch-rs")
-        .join("target")
-        .join("wasm32-wasip2")
-        .join("release")
-        .join("fetch_rs.wasm");
+    let fetch_component_path = get_fetch_component_path()?;
 
     // Load component with empty filter (should load no tools)
     let tools_to_load: Vec<String> = vec![];
@@ -150,15 +140,7 @@ async fn test_nonexistent_tool_filter() -> Result<()> {
     let tempdir = tempfile::tempdir()?;
     let lifecycle_manager = LifecycleManager::new(&tempdir).await?;
 
-    // Build the fetch-rs component
-    let project_root = std::env::current_dir().context("Failed to get current directory")?;
-    let fetch_component_path = project_root
-        .join("examples")
-        .join("fetch-rs")
-        .join("target")
-        .join("wasm32-wasip2")
-        .join("release")
-        .join("fetch_rs.wasm");
+    let fetch_component_path = get_fetch_component_path()?;
 
     // Load component with filter for non-existent tool
     let tools_to_load = vec!["nonexistent_tool".to_string()];

@@ -498,7 +498,10 @@ impl LifecycleManager {
                 total_tools = tool_metadata.len(),
                 "Filtering tools for component"
             );
-            tool_metadata.retain(|tool| filter.contains(&tool.normalized_name));
+            // Convert filter to HashSet for O(1) lookup performance
+            let filter_set: std::collections::HashSet<&str> =
+                filter.iter().map(|s| s.as_str()).collect();
+            tool_metadata.retain(|tool| filter_set.contains(tool.normalized_name.as_str()));
             info!(
                 component_id = %component_id,
                 filtered_count = tool_metadata.len(),
