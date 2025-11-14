@@ -780,113 +780,108 @@ async fn main() -> Result<()> {
 
                     // Apply policy file if provided
                     if let Some(policy_path) = policy_file {
-                        // Read and apply the policy file
-                        let policy_content = std::fs::read_to_string(policy_path)
-                            .context("Failed to read policy file")?;
-
-                        // Parse the policy as YAML and convert to JSON for the grant-* tools
-                        let policy: serde_json::Value = serde_yaml::from_str(&policy_content)
-                            .context("Failed to parse policy file as YAML")?;
-
-                        // Apply the policy to the component
-                        // This is a simplified version - the full implementation would need to
-                        // parse the policy structure and call the appropriate grant-* functions
                         tracing::info!("Applying policy from file to component {}", component_id);
 
-                        // For now, we'll use the existing policy application logic
-                        // The policy should contain permissions like storage, network, etc.
-                        if let Some(permissions) = policy.get("permissions") {
-                            // Apply storage permissions
-                            if let Some(storage) =
-                                permissions.get("storage").and_then(|v| v.as_array())
-                            {
-                                for s in storage {
-                                    let uri =
-                                        s.get("uri").and_then(|v| v.as_str()).ok_or_else(|| {
-                                            anyhow::anyhow!("Storage permission missing 'uri'")
-                                        })?;
-                                    let access = s
-                                        .get("access")
-                                        .and_then(|v| v.as_array())
-                                        .ok_or_else(|| {
-                                            anyhow::anyhow!("Storage permission missing 'access'")
-                                        })?
-                                        .iter()
-                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                        .collect::<Vec<_>>();
+                        // Use PolicyParser from the policy crate to parse the policy file
+                        let policy_doc = policy::PolicyParser::parse_file(policy_path)
+                            .context("Failed to parse policy file")?;
 
+                        // Apply storage permissions from the allow list
+                        if let Some(storage) = &policy_doc.permissions.storage {
+                            if let Some(allow_list) = &storage.allow {
+                                for perm in allow_list {
                                     lifecycle_manager
                                         .grant_permission(
                                             component_id,
                                             "storage",
                                             &json!({
-                                                "uri": uri,
-                                                "access": access
+                                                "uri": perm.uri,
+                                                "access": perm.access.iter().map(|a| match a {
+                                                    policy::AccessType::Read => "read",
+                                                    policy::AccessType::Write => "write",
+                                                }).collect::<Vec<_>>()
                                             }),
                                         )
                                         .await?;
                                 }
                             }
+                        }
 
-                            // Apply network permissions
-                            if let Some(network) =
-                                permissions.get("network").and_then(|v| v.as_array())
-                            {
-                                for n in network {
-                                    let host = n.get("host").and_then(|v| v.as_str()).ok_or_else(
-                                        || anyhow::anyhow!("Network permission missing 'host'"),
-                                    )?;
-
-                                    lifecycle_manager
-                                        .grant_permission(
-                                            component_id,
-                                            "network",
-                                            &json!({
-                                                "host": host
-                                            }),
-                                        )
-                                        .await?;
+                        // Apply network permissions from the allow list
+                        if let Some(network) = &policy_doc.permissions.network {
+                            if let Some(allow_list) = &network.allow {
+                                for perm in allow_list {
+                                    match perm {
+                                        policy::NetworkPermission::Host(host) => {
+                                            lifecycle_manager
+                                                .grant_permission(
+                                                    component_id,
+                                                    "network",
+                                                    &json!({
+                                                        "host": host.host
+                                                    }),
+                                                )
+                                                .await?;
+                                        }
+                                        policy::NetworkPermission::Cidr(cidr) => {
+                                            lifecycle_manager
+                                                .grant_permission(
+                                                    component_id,
+                                                    "network",
+                                                    &json!({
+                                                        "cidr": cidr.cidr
+                                                    }),
+                                                )
+                                                .await?;
+                                        }
+                                    }
                                 }
                             }
+                        }
 
-                            // Apply environment variable permissions
-                            if let Some(env_vars) = permissions
-                                .get("environment-variables")
-                                .and_then(|v| v.as_array())
-                            {
-                                for e in env_vars {
-                                    let key =
-                                        e.get("key").and_then(|v| v.as_str()).ok_or_else(|| {
-                                            anyhow::anyhow!(
-                                                "Environment variable permission missing 'key'"
-                                            )
-                                        })?;
-
+                        // Apply environment variable permissions from the allow list
+                        if let Some(environment) = &policy_doc.permissions.environment {
+                            if let Some(allow_list) = &environment.allow {
+                                for perm in allow_list {
                                     lifecycle_manager
                                         .grant_permission(
                                             component_id,
                                             "environment-variable",
                                             &json!({
-                                                "key": key
+                                                "key": perm.key
                                             }),
                                         )
                                         .await?;
                                 }
                             }
+                        }
 
-                            // Apply memory permissions
-                            if let Some(memory) = permissions.get("memory") {
-                                if let Some(limit) = memory.get("limit").and_then(|v| v.as_str()) {
+                        // Apply resource limits if specified
+                        if let Some(resources) = &policy_doc.permissions.resources {
+                            if let Some(limits) = &resources.limits {
+                                let mut limits_json = json!({});
+
+                                if let Some(cpu) = &limits.cpu {
+                                    limits_json["cpu"] = match cpu {
+                                        policy::CpuLimit::String(s) => json!(s),
+                                        policy::CpuLimit::Number(n) => json!(n),
+                                    };
+                                }
+
+                                if let Some(memory) = &limits.memory {
+                                    limits_json["memory"] = match memory {
+                                        policy::MemoryLimit::String(s) => json!(s),
+                                        policy::MemoryLimit::Number(n) => json!(n),
+                                    };
+                                }
+
+                                if !limits_json.as_object().unwrap().is_empty() {
                                     lifecycle_manager
                                         .grant_permission(
                                             component_id,
-                                            "memory",
+                                            "resources",
                                             &json!({
-                                                "resources": {
-                                                    "limits": {
-                                                        "memory": limit
-                                                    }
-                                                }
+                                                "limits": limits_json
                                             }),
                                         )
                                         .await?;
@@ -904,24 +899,49 @@ async fn main() -> Result<()> {
                             component_id
                         ))?;
 
-                    // Find the first tool in the component
+                    // Find the tool to call in the component
                     let tool_name = if let Some(arr) = schema["tools"].as_array() {
-                        if let Some(first_tool) = arr.first() {
-                            // Try nested structure first (live component schema)
-                            let tool_info = if first_tool.get("properties").is_some() {
-                                &first_tool["properties"]["result"]
-                            } else {
-                                // Fallback to flat structure (metadata schema)
-                                first_tool
-                            };
-
-                            tool_info["name"]
-                                .as_str()
-                                .ok_or_else(|| anyhow::anyhow!("Tool name not found in schema"))?
-                                .to_string()
-                        } else {
+                        if arr.is_empty() {
                             bail!("No tools found in component");
                         }
+
+                        // Check if component has multiple tools
+                        if arr.len() > 1 {
+                            // Collect tool names for error message
+                            let tool_names: Vec<String> = arr
+                                .iter()
+                                .map(|tool| {
+                                    let tool_info = if tool.get("properties").is_some() {
+                                        &tool["properties"]["result"]
+                                    } else {
+                                        tool
+                                    };
+                                    tool_info["name"]
+                                        .as_str()
+                                        .unwrap_or("<unknown>")
+                                        .to_string()
+                                })
+                                .collect();
+                            bail!(
+                                "Component '{}' has multiple tools: [{}]. This command currently only supports components with a single tool.",
+                                component_id,
+                                tool_names.join(", ")
+                            );
+                        }
+
+                        // Only one tool present, proceed
+                        let first_tool = &arr[0];
+                        let tool_info = if first_tool.get("properties").is_some() {
+                            &first_tool["properties"]["result"]
+                        } else {
+                            // Fallback to flat structure (metadata schema)
+                            first_tool
+                        };
+
+                        tool_info["name"]
+                            .as_str()
+                            .ok_or_else(|| anyhow::anyhow!("Tool name not found in schema"))?
+                            .to_string()
                     } else {
                         bail!("No tools found in component");
                     };

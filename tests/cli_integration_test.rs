@@ -1045,11 +1045,13 @@ async fn test_cli_inspect_call_with_policy_file() -> Result<()> {
         .as_str()
         .expect("Component ID should be in load output");
 
-    // Create a temporary policy file
+    // Create a temporary policy file with correct format
     let policy_content = r#"
+version: "1.0"
 permissions:
   network:
-    - host: "example.com"
+    allow:
+      - host: "example.com"
 "#;
     let policy_file = ctx.temp_dir.path().join("test-policy.yaml");
     std::fs::write(&policy_file, policy_content)?;
