@@ -164,7 +164,7 @@ secrets:
   # Create a secret for API keys and credentials
   create: false
   # Secret name
-  name: wassette-secrets
+  name: ""
   # Secret data (will be base64 encoded)
   data: {}
     # OPENWEATHER_API_KEY: "your-api-key"
