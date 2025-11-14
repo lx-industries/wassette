@@ -27,11 +27,7 @@ async fn test_fetch_advanced_get_method() -> Result<()> {
 
     // Grant network permission for httpbin.org
     manager
-        .grant_permission(
-            &component_id,
-            "network",
-            &json!({"host": "httpbin.org"}),
-        )
+        .grant_permission(&component_id, "network", &json!({"host": "httpbin.org"}))
         .await?;
 
     let target_url = "https://httpbin.org/get";
@@ -58,19 +54,22 @@ async fn test_fetch_advanced_get_method() -> Result<()> {
     match result {
         Ok(response) => {
             println!("fetch-advanced response: {response}");
-            
+
             // Parse the response to check status and body
             let response_json: serde_json::Value = serde_json::from_str(&response)?;
             assert!(response_json.get("Ok").is_some(), "Expected Ok response");
-            
+
             let response_data = response_json.get("Ok").unwrap();
             let status = response_data.get("status").and_then(|v| v.as_u64());
             assert_eq!(status, Some(200), "Expected status 200");
-            
+
             let body = response_data.get("body").and_then(|v| v.as_str());
             assert!(body.is_some(), "Expected response body");
-            assert!(body.unwrap().contains("httpbin"), "Expected httpbin in response body");
-            
+            assert!(
+                body.unwrap().contains("httpbin"),
+                "Expected httpbin in response body"
+            );
+
             println!("✅ fetch-advanced GET method test passed!");
         }
         Err(e) => {
@@ -93,11 +92,7 @@ async fn test_fetch_advanced_with_custom_headers() -> Result<()> {
 
     // Grant network permission
     manager
-        .grant_permission(
-            &component_id,
-            "network",
-            &json!({"host": "httpbin.org"}),
-        )
+        .grant_permission(&component_id, "network", &json!({"host": "httpbin.org"}))
         .await?;
 
     let target_url = "https://httpbin.org/headers";
@@ -127,17 +122,22 @@ async fn test_fetch_advanced_with_custom_headers() -> Result<()> {
     match result {
         Ok(response) => {
             println!("fetch-advanced with headers response: {response}");
-            
+
             let response_json: serde_json::Value = serde_json::from_str(&response)?;
             assert!(response_json.get("Ok").is_some(), "Expected Ok response");
-            
+
             let response_data = response_json.get("Ok").unwrap();
-            let body = response_data.get("body").and_then(|v| v.as_str()).unwrap_or("");
-            
+            let body = response_data
+                .get("body")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
             // httpbin.org/headers echoes back the headers we sent
-            assert!(body.contains("X-Custom-Header") || body.contains("x-custom-header"), 
-                   "Expected custom header in response body");
-            
+            assert!(
+                body.contains("X-Custom-Header") || body.contains("x-custom-header"),
+                "Expected custom header in response body"
+            );
+
             println!("✅ fetch-advanced custom headers test passed!");
         }
         Err(e) => {
@@ -160,11 +160,7 @@ async fn test_fetch_advanced_redirect_following() -> Result<()> {
 
     // Grant network permission
     manager
-        .grant_permission(
-            &component_id,
-            "network",
-            &json!({"host": "httpbin.org"}),
-        )
+        .grant_permission(&component_id, "network", &json!({"host": "httpbin.org"}))
         .await?;
 
     // httpbin.org/redirect/2 will redirect twice before returning
@@ -192,14 +188,21 @@ async fn test_fetch_advanced_redirect_following() -> Result<()> {
     match result {
         Ok(response) => {
             println!("fetch-advanced redirect response: {response}");
-            
+
             let response_json: serde_json::Value = serde_json::from_str(&response)?;
-            assert!(response_json.get("Ok").is_some(), "Expected Ok response after redirects");
-            
+            assert!(
+                response_json.get("Ok").is_some(),
+                "Expected Ok response after redirects"
+            );
+
             let response_data = response_json.get("Ok").unwrap();
             let status = response_data.get("status").and_then(|v| v.as_u64());
-            assert_eq!(status, Some(200), "Expected final status 200 after redirects");
-            
+            assert_eq!(
+                status,
+                Some(200),
+                "Expected final status 200 after redirects"
+            );
+
             println!("✅ fetch-advanced redirect following test passed!");
         }
         Err(e) => {
@@ -222,11 +225,7 @@ async fn test_fetch_advanced_no_redirect() -> Result<()> {
 
     // Grant network permission
     manager
-        .grant_permission(
-            &component_id,
-            "network",
-            &json!({"host": "httpbin.org"}),
-        )
+        .grant_permission(&component_id, "network", &json!({"host": "httpbin.org"}))
         .await?;
 
     let target_url = "https://httpbin.org/redirect/1";
@@ -253,19 +252,20 @@ async fn test_fetch_advanced_no_redirect() -> Result<()> {
     match result {
         Ok(response) => {
             println!("fetch-advanced no-redirect response: {response}");
-            
+
             let response_json: serde_json::Value = serde_json::from_str(&response)?;
             assert!(response_json.get("Ok").is_some(), "Expected Ok response");
-            
+
             let response_data = response_json.get("Ok").unwrap();
             let status = response_data.get("status").and_then(|v| v.as_u64());
-            
+
             // Should get redirect status code (302 or similar)
             assert!(
                 status == Some(302) || status == Some(301) || status == Some(307),
-                "Expected redirect status code, got: {:?}", status
+                "Expected redirect status code, got: {:?}",
+                status
             );
-            
+
             println!("✅ fetch-advanced no-redirect test passed!");
         }
         Err(e) => {
@@ -288,11 +288,7 @@ async fn test_fetch_advanced_status_204() -> Result<()> {
 
     // Grant network permission
     manager
-        .grant_permission(
-            &component_id,
-            "network",
-            &json!({"host": "httpbin.org"}),
-        )
+        .grant_permission(&component_id, "network", &json!({"host": "httpbin.org"}))
         .await?;
 
     let target_url = "https://httpbin.org/status/204";
@@ -319,17 +315,20 @@ async fn test_fetch_advanced_status_204() -> Result<()> {
     match result {
         Ok(response) => {
             println!("fetch-advanced 204 response: {response}");
-            
+
             let response_json: serde_json::Value = serde_json::from_str(&response)?;
             assert!(response_json.get("Ok").is_some(), "Expected Ok response");
-            
+
             let response_data = response_json.get("Ok").unwrap();
             let status = response_data.get("status").and_then(|v| v.as_u64());
             assert_eq!(status, Some(204), "Expected status 204");
-            
-            let body = response_data.get("body").and_then(|v| v.as_str()).unwrap_or("");
+
+            let body = response_data
+                .get("body")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             assert_eq!(body, "", "Expected empty body for 204 response");
-            
+
             println!("✅ fetch-advanced 204 No Content test passed!");
         }
         Err(e) => {
@@ -352,11 +351,7 @@ async fn test_fetch_advanced_different_methods() -> Result<()> {
 
     // Grant network permission
     manager
-        .grant_permission(
-            &component_id,
-            "network",
-            &json!({"host": "httpbin.org"}),
-        )
+        .grant_permission(&component_id, "network", &json!({"host": "httpbin.org"}))
         .await?;
 
     // Test HEAD method
@@ -381,18 +376,24 @@ async fn test_fetch_advanced_different_methods() -> Result<()> {
     match result {
         Ok(response) => {
             println!("fetch-advanced HEAD response: {response}");
-            
+
             let response_json: serde_json::Value = serde_json::from_str(&response)?;
-            assert!(response_json.get("Ok").is_some(), "Expected Ok response for HEAD");
-            
+            assert!(
+                response_json.get("Ok").is_some(),
+                "Expected Ok response for HEAD"
+            );
+
             let response_data = response_json.get("Ok").unwrap();
             let status = response_data.get("status").and_then(|v| v.as_u64());
             assert_eq!(status, Some(200), "Expected status 200 for HEAD");
-            
+
             // HEAD request should have empty body
-            let body = response_data.get("body").and_then(|v| v.as_str()).unwrap_or("");
+            let body = response_data
+                .get("body")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             assert_eq!(body, "", "Expected empty body for HEAD request");
-            
+
             println!("✅ fetch-advanced HEAD method test passed!");
         }
         Err(e) => {
@@ -415,11 +416,7 @@ async fn test_fetch_advanced_charset_handling() -> Result<()> {
 
     // Grant network permission
     manager
-        .grant_permission(
-            &component_id,
-            "network",
-            &json!({"host": "httpbin.org"}),
-        )
+        .grant_permission(&component_id, "network", &json!({"host": "httpbin.org"}))
         .await?;
 
     let target_url = "https://httpbin.org/encoding/utf8";
@@ -446,17 +443,17 @@ async fn test_fetch_advanced_charset_handling() -> Result<()> {
     match result {
         Ok(response) => {
             println!("fetch-advanced charset response: {response}");
-            
+
             let response_json: serde_json::Value = serde_json::from_str(&response)?;
             assert!(response_json.get("Ok").is_some(), "Expected Ok response");
-            
+
             let response_data = response_json.get("Ok").unwrap();
             let status = response_data.get("status").and_then(|v| v.as_u64());
             assert_eq!(status, Some(200), "Expected status 200");
-            
+
             let is_binary = response_data.get("is-binary").and_then(|v| v.as_bool());
             assert_eq!(is_binary, Some(false), "Expected text response, not binary");
-            
+
             println!("✅ fetch-advanced charset handling test passed!");
         }
         Err(e) => {
@@ -479,11 +476,7 @@ async fn test_fetch_advanced_post_with_body() -> Result<()> {
 
     // Grant network permission
     manager
-        .grant_permission(
-            &component_id,
-            "network",
-            &json!({"host": "httpbin.org"}),
-        )
+        .grant_permission(&component_id, "network", &json!({"host": "httpbin.org"}))
         .await?;
 
     let target_url = "https://httpbin.org/post";
@@ -513,19 +506,24 @@ async fn test_fetch_advanced_post_with_body() -> Result<()> {
     match result {
         Ok(response) => {
             println!("fetch-advanced POST response: {response}");
-            
+
             let response_json: serde_json::Value = serde_json::from_str(&response)?;
             assert!(response_json.get("Ok").is_some(), "Expected Ok response");
-            
+
             let response_data = response_json.get("Ok").unwrap();
             let status = response_data.get("status").and_then(|v| v.as_u64());
             assert_eq!(status, Some(200), "Expected status 200");
-            
-            let body = response_data.get("body").and_then(|v| v.as_str()).unwrap_or("");
+
+            let body = response_data
+                .get("body")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             // httpbin.org/post echoes back the data we sent
-            assert!(body.contains("test") && body.contains("data"), 
-                   "Expected POST body to be echoed back");
-            
+            assert!(
+                body.contains("test") && body.contains("data"),
+                "Expected POST body to be echoed back"
+            );
+
             println!("✅ fetch-advanced POST with body test passed!");
         }
         Err(e) => {
