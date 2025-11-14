@@ -53,14 +53,11 @@ pub(crate) async fn handle_load_component(
         .ok_or_else(|| anyhow::anyhow!("Missing required argument: 'path'"))?;
 
     // Extract optional tools filter
-    let tools_filter = args
-        .get("tools")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect::<Vec<String>>()
-        });
+    let tools_filter = args.get("tools").and_then(|v| v.as_array()).map(|arr| {
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect::<Vec<String>>()
+    });
 
     debug!(
         path = %path,
@@ -69,7 +66,10 @@ pub(crate) async fn handle_load_component(
         "Component load operation started"
     );
 
-    match lifecycle_manager.load_component_with_tools(path, tools_filter.as_deref()).await {
+    match lifecycle_manager
+        .load_component_with_tools(path, tools_filter.as_deref())
+        .await
+    {
         Ok(outcome) => {
             info!(
                 path = %path,
@@ -407,18 +407,18 @@ pub async fn handle_load_component_cli(
         .ok_or_else(|| anyhow::anyhow!("Missing required argument: 'path'"))?;
 
     // Extract optional tools filter
-    let tools_filter = args
-        .get("tools")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect::<Vec<String>>()
-        });
+    let tools_filter = args.get("tools").and_then(|v| v.as_array()).map(|arr| {
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect::<Vec<String>>()
+    });
 
     info!(path, tools_filter = ?tools_filter, "Loading component (CLI mode)");
 
-    match lifecycle_manager.load_component_with_tools(path, tools_filter.as_deref()).await {
+    match lifecycle_manager
+        .load_component_with_tools(path, tools_filter.as_deref())
+        .await
+    {
         Ok(outcome) => {
             handle_tool_list_notification(None, &outcome.component_id, "load").await;
             create_load_component_success_result(&outcome)

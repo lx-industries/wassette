@@ -33,7 +33,11 @@ async fn test_selective_tool_loading() -> Result<()> {
         .context("Failed to load component with selective tools")?;
 
     // Verify only the specified tool was loaded
-    assert_eq!(outcome.tool_names.len(), 1, "Expected only 1 tool to be loaded");
+    assert_eq!(
+        outcome.tool_names.len(),
+        1,
+        "Expected only 1 tool to be loaded"
+    );
     assert_eq!(
         outcome.tool_names[0], "fetch",
         "Expected 'fetch' tool to be loaded"
