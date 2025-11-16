@@ -280,7 +280,9 @@ async fn main() -> Result<()> {
                     registry_password_stdin,
                 } => {
                     // Validate credentials pairing
-                    if registry_user.is_some() != registry_password.is_some() && !registry_password_stdin {
+                    if registry_user.is_some() != registry_password.is_some()
+                        && !registry_password_stdin
+                    {
                         bail!("Both --registry-user and --registry-password (or --registry-password-stdin) must be provided together");
                     }
 
@@ -291,7 +293,8 @@ async fn main() -> Result<()> {
                         }
                         use std::io::Read;
                         let mut buffer = String::new();
-                        std::io::stdin().read_to_string(&mut buffer)
+                        std::io::stdin()
+                            .read_to_string(&mut buffer)
                             .context("Failed to read password from stdin")?;
                         Some(buffer.trim().to_string())
                     } else {
@@ -299,20 +302,21 @@ async fn main() -> Result<()> {
                     };
 
                     // Create credentials if username and password are provided
-                    let credentials = if let (Some(username), Some(pwd)) = (registry_user, &password) {
-                        Some(OciCredentials {
-                            username: username.clone(),
-                            password: pwd.clone(),
-                        })
-                    } else {
-                        None
-                    };
+                    let credentials =
+                        if let (Some(username), Some(pwd)) = (registry_user, &password) {
+                            Some(OciCredentials {
+                                username: username.clone(),
+                                password: pwd.clone(),
+                            })
+                        } else {
+                            None
+                        };
 
                     let component_dir = component_dir.clone().or_else(|| cli.component_dir.clone());
                     let lifecycle_manager = create_lifecycle_manager(component_dir).await?;
                     let mut args = Map::new();
                     args.insert("path".to_string(), json!(path));
-                    
+
                     // Use the new handler with credentials
                     use mcp_server::components::handle_load_component_cli_with_credentials;
                     use rmcp::model::CallToolRequestParam;

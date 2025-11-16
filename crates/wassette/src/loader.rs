@@ -200,7 +200,13 @@ impl Loadable for ComponentResource {
         oci_client: &oci_client::Client,
         show_progress: bool,
     ) -> Result<DownloadedResource> {
-        Self::from_oci_reference_with_progress_and_credentials(reference, oci_client, show_progress, None).await
+        Self::from_oci_reference_with_progress_and_credentials(
+            reference,
+            oci_client,
+            show_progress,
+            None,
+        )
+        .await
     }
 
     async fn from_oci_reference_with_progress_and_credentials(
@@ -418,7 +424,14 @@ pub(crate) async fn load_resource_with_progress<T: Loadable>(
     http_client: &reqwest::Client,
     show_progress: bool,
 ) -> Result<DownloadedResource> {
-    load_resource_with_progress_and_credentials::<T>(uri, oci_client, http_client, show_progress, None).await
+    load_resource_with_progress_and_credentials::<T>(
+        uri,
+        oci_client,
+        http_client,
+        show_progress,
+        None,
+    )
+    .await
 }
 
 /// Generic resource loading function with optional progress reporting and credentials
@@ -438,7 +451,15 @@ pub(crate) async fn load_resource_with_progress_and_credentials<T: Loadable>(
 
     match scheme {
         "file" => T::from_local_file(Path::new(reference)).await,
-        "oci" => T::from_oci_reference_with_progress_and_credentials(reference, oci_client, show_progress, credentials).await,
+        "oci" => {
+            T::from_oci_reference_with_progress_and_credentials(
+                reference,
+                oci_client,
+                show_progress,
+                credentials,
+            )
+            .await
+        }
         "https" => T::from_url(uri, http_client).await,
         _ => bail!("Unsupported {} scheme: {}", T::RESOURCE_TYPE, scheme),
     }

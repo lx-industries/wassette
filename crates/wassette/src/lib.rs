@@ -42,11 +42,11 @@ use component_storage::ComponentStorage;
 pub use config::{LifecycleBuilder, LifecycleConfig};
 pub use http::WassetteWasiState;
 use loader::{ComponentResource, DownloadedResource};
+pub use oci_auth::OciCredentials;
 use policy_internal::PolicyManager;
 pub use policy_internal::{PermissionGrantRequest, PermissionRule, PolicyInfo};
 use runtime_context::RuntimeContext;
 pub use secrets::SecretsManager;
-pub use oci_auth::OciCredentials;
 use wasistate::WasiState;
 pub use wasistate::{
     create_wasi_state_template_from_policy, CustomResourceLimiter, PermissionError,

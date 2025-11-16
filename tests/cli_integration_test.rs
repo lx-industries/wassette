@@ -916,10 +916,13 @@ async fn test_cli_component_load_with_incomplete_credentials() -> Result<()> {
         ])
         .await?;
 
-    assert_ne!(exit_code, 0, "Command should fail with incomplete credentials");
+    assert_ne!(
+        exit_code, 0,
+        "Command should fail with incomplete credentials"
+    );
     assert!(
-        stderr.contains("Both --registry-user and --registry-password") ||
-        stderr.contains("must be provided together"),
+        stderr.contains("Both --registry-user and --registry-password")
+            || stderr.contains("must be provided together"),
         "Error message should mention incomplete credentials. Got: {stderr}"
     );
 
@@ -934,10 +937,13 @@ async fn test_cli_component_load_with_incomplete_credentials() -> Result<()> {
         ])
         .await?;
 
-    assert_ne!(exit_code2, 0, "Command should fail with incomplete credentials");
+    assert_ne!(
+        exit_code2, 0,
+        "Command should fail with incomplete credentials"
+    );
     assert!(
-        stderr2.contains("Both --registry-user and --registry-password") ||
-        stderr2.contains("must be provided together"),
+        stderr2.contains("Both --registry-user and --registry-password")
+            || stderr2.contains("must be provided together"),
         "Error message should mention incomplete credentials. Got: {stderr2}"
     );
 
@@ -948,9 +954,7 @@ async fn test_cli_component_load_with_incomplete_credentials() -> Result<()> {
 async fn test_cli_component_load_help_shows_registry_flags() -> Result<()> {
     let ctx = CliTestContext::new().await?;
 
-    let (stdout, _stderr, exit_code) = ctx
-        .run_command(&["component", "load", "--help"])
-        .await?;
+    let (stdout, _stderr, exit_code) = ctx.run_command(&["component", "load", "--help"]).await?;
 
     assert_eq!(exit_code, 0, "Help command should succeed");
 

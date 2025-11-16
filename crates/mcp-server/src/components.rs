@@ -407,7 +407,10 @@ pub async fn handle_load_component_cli_with_credentials(
 
     info!(path, "Loading component (CLI mode)");
 
-    match lifecycle_manager.load_component_with_credentials(path, credentials).await {
+    match lifecycle_manager
+        .load_component_with_credentials(path, credentials)
+        .await
+    {
         Ok(outcome) => {
             handle_tool_list_notification(None, &outcome.component_id, "load").await;
             create_load_component_success_result(&outcome)
