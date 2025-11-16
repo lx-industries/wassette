@@ -554,9 +554,9 @@ mod tests {
         let response = handle_request(request, &secrets_manager).await.unwrap();
         assert_eq!(response.status, "success");
 
-        // Verify secret was actually set
+        // Verify secret was actually set in memory
         let secrets = secrets_manager
-            .list_component_secrets("test-component", true)
+            .list_all_secrets("test-component", true)
             .await
             .unwrap();
         assert_eq!(secrets.get("API_KEY"), Some(&Some("secret123".to_string())));
