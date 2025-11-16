@@ -4937,6 +4937,7 @@ dependencies = [
  "oci-wasm",
  "policy",
  "proptest",
+ "regex",
  "reqwest",
  "secrecy",
  "serde",

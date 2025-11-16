@@ -319,6 +319,57 @@ pub struct ComponentInstance {
     package_docs: Option<Value>,
 }
 
+/// Attempt to extract missing environment variable names from error messages
+fn extract_missing_env_vars(error_message: &str) -> Vec<String> {
+    let mut missing_vars = Vec::new();
+    
+    // Common patterns for missing environment variable errors
+    let patterns = [
+        // WASI error: "environment variable not found: API_KEY"
+        r"environment variable not found:\s*([A-Z_][A-Z0-9_]*)",
+        // Generic: "missing environment variable API_KEY"
+        r"missing environment variable\s*([A-Z_][A-Z0-9_]*)",
+        // env::var error: "environment variable `API_KEY` not found"
+        r"environment variable `([A-Z_][A-Z0-9_]*)` not found",
+        // Other variations
+        r"variable\s+([A-Z_][A-Z0-9_]*)\s+not\s+found",
+    ];
+    
+    for pattern in &patterns {
+        if let Ok(re) = regex::Regex::new(pattern) {
+            for cap in re.captures_iter(error_message) {
+                if let Some(var_name) = cap.get(1) {
+                    missing_vars.push(var_name.as_str().to_string());
+                }
+            }
+        }
+    }
+    
+    missing_vars
+}
+
+/// Enhance error message with instructions for missing secrets
+fn enhance_missing_secret_error(component_id: &str, error: anyhow::Error) -> anyhow::Error {
+    let error_msg = error.to_string();
+    let missing_vars = extract_missing_env_vars(&error_msg);
+    
+    if !missing_vars.is_empty() {
+        let vars_list = missing_vars.join(", ");
+        let hint = format!(
+            "\n\nComponent execution failed. Missing secrets: {}\n\
+            To provide the secret(s), use:\n  \
+            wassette secret set --component {} {}",
+            vars_list,
+            component_id,
+            missing_vars.iter().map(|v| format!("{}=value", v)).collect::<Vec<_>>().join(" ")
+        );
+        
+        anyhow!("{}{}", error_msg, hint)
+    } else {
+        error
+    }
+}
+
 impl LifecycleManager {
     /// Begin constructing a lifecycle manager with a fluent builder that
     /// validates configuration and applies sensible defaults.
@@ -1076,8 +1127,8 @@ impl LifecycleManager {
                 // Return a more informative error with instructions
                 return Err(anyhow!(perm_error.to_user_message(component_id)));
             }
-            // Otherwise, return the original WASM execution error
-            return Err(e);
+            // Check if it might be a missing secret error and enhance the message
+            return Err(enhance_missing_secret_error(component_id, e));
         }
 
         let result_json = vals_to_json(&results);
