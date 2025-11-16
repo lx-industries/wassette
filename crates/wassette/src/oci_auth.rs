@@ -263,4 +263,125 @@ mod tests {
         // Should not have trailing slash
         assert!(!server.ends_with('/'), "Server should not end with slash");
     }
+
+    #[test]
+    fn test_explicit_credentials_take_precedence() {
+        use temp_env;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a test Docker config with basic auth
+        let config_content = r#"{
+            "auths": {
+                "ghcr.io": {
+                    "auth": "ZG9ja2VydXNlcjpkb2NrZXJwYXNz"
+                }
+            }
+        }"#;
+
+        let config_path = create_test_docker_config(&temp_dir, config_content);
+        let docker_config_dir = config_path.parent().unwrap();
+
+        temp_env::with_var("DOCKER_CONFIG", Some(docker_config_dir), || {
+            let reference: Reference = "ghcr.io/test/image:latest".parse().unwrap();
+            
+            // Provide explicit credentials that should override Docker config
+            let explicit_creds = OciCredentials {
+                username: "explicituser".to_string(),
+                password: "explicitpass".to_string(),
+            };
+            
+            let auth = get_registry_auth_with_credentials(&reference, Some(explicit_creds)).unwrap();
+
+            match auth {
+                RegistryAuth::Basic(username, password) => {
+                    assert_eq!(username, "explicituser");
+                    assert_eq!(password, "explicitpass");
+                }
+                _ => panic!("Expected Basic auth with explicit credentials, got: {:?}", auth),
+            }
+        });
+    }
+
+    #[test]
+    fn test_fallback_to_docker_config_when_no_explicit_credentials() {
+        use temp_env;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a test Docker config with basic auth
+        let config_content = r#"{
+            "auths": {
+                "ghcr.io": {
+                    "auth": "dGVzdHVzZXI6dGVzdHBhc3M="
+                }
+            }
+        }"#;
+
+        let config_path = create_test_docker_config(&temp_dir, config_content);
+        let docker_config_dir = config_path.parent().unwrap();
+
+        temp_env::with_var("DOCKER_CONFIG", Some(docker_config_dir), || {
+            let reference: Reference = "ghcr.io/test/image:latest".parse().unwrap();
+            
+            // Call with None for explicit credentials - should use Docker config
+            let auth = get_registry_auth_with_credentials(&reference, None).unwrap();
+
+            match auth {
+                RegistryAuth::Basic(username, password) => {
+                    assert_eq!(username, "testuser");
+                    assert_eq!(password, "testpass");
+                }
+                _ => panic!("Expected Basic auth from Docker config, got: {:?}", auth),
+            }
+        });
+    }
+
+    #[test]
+    fn test_explicit_credentials_without_docker_config() {
+        use temp_env;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        // Set DOCKER_CONFIG to empty temp dir (no config.json)
+        temp_env::with_var("DOCKER_CONFIG", Some(temp_dir.path()), || {
+            let reference: Reference = "ghcr.io/test/image:latest".parse().unwrap();
+            
+            // Provide explicit credentials
+            let explicit_creds = OciCredentials {
+                username: "explicituser".to_string(),
+                password: "explicitpass".to_string(),
+            };
+            
+            let auth = get_registry_auth_with_credentials(&reference, Some(explicit_creds)).unwrap();
+
+            match auth {
+                RegistryAuth::Basic(username, password) => {
+                    assert_eq!(username, "explicituser");
+                    assert_eq!(password, "explicitpass");
+                }
+                _ => panic!("Expected Basic auth with explicit credentials, got: {:?}", auth),
+            }
+        });
+    }
+
+    #[test]
+    fn test_anonymous_when_no_credentials_available() {
+        use temp_env;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        // Set DOCKER_CONFIG to empty temp dir (no config.json)
+        temp_env::with_var("DOCKER_CONFIG", Some(temp_dir.path()), || {
+            let reference: Reference = "docker.io/library/nginx:latest".parse().unwrap();
+            
+            // Call with None for explicit credentials and no Docker config
+            let auth = get_registry_auth_with_credentials(&reference, None).unwrap();
+
+            assert!(
+                matches!(auth, RegistryAuth::Anonymous),
+                "Expected Anonymous auth when no credentials available"
+            );
+        });
+    }
 }
