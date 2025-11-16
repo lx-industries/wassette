@@ -159,7 +159,7 @@ async fn handle_request(
             value,
         } => {
             secrets_manager
-                .set_component_secrets(&component_id, &[(key.clone(), value)])
+                .inject_secret(&component_id, key.clone(), value)
                 .await
                 .context("Failed to set secret")?;
             Ok(IpcResponse::success(format!(
@@ -169,14 +169,27 @@ async fn handle_request(
         }
 
         IpcCommand::DeleteSecret { component_id, key } => {
-            secrets_manager
-                .delete_component_secrets(&component_id, std::slice::from_ref(&key))
+            // Try to delete from memory store first
+            match secrets_manager
+                .remove_memory_secret(&component_id, &key)
                 .await
-                .context("Failed to delete secret")?;
-            Ok(IpcResponse::success(format!(
-                "Secret '{}' deleted from component '{}'",
-                key, component_id
-            )))
+            {
+                Ok(_) => Ok(IpcResponse::success(format!(
+                    "Secret '{}' deleted from component '{}'",
+                    key, component_id
+                ))),
+                Err(_) => {
+                    // If not in memory, try file-based
+                    secrets_manager
+                        .delete_component_secrets(&component_id, std::slice::from_ref(&key))
+                        .await
+                        .context("Failed to delete secret")?;
+                    Ok(IpcResponse::success(format!(
+                        "Secret '{}' deleted from component '{}'",
+                        key, component_id
+                    )))
+                }
+            }
         }
 
         IpcCommand::ListSecrets {
@@ -184,7 +197,7 @@ async fn handle_request(
             show_values,
         } => {
             let secrets = secrets_manager
-                .list_component_secrets(&component_id, show_values)
+                .list_all_secrets(&component_id, show_values)
                 .await
                 .context("Failed to list secrets")?;
 

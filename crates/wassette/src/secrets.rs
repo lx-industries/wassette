@@ -16,8 +16,10 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use anyhow::{anyhow, Context, Result};
+use secrecy::{ExposeSecret, SecretString};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
+use zeroize::Zeroize;
 
 /// Cache entry for component secrets
 #[derive(Debug, Clone)]
@@ -33,8 +35,11 @@ pub struct SecretCache {
 pub struct SecretsManager {
     /// Directory where secrets are stored
     secrets_dir: PathBuf,
-    /// Cache of component secrets
+    /// Cache of component secrets from files
     cache: RwLock<HashMap<String, SecretCache>>,
+    /// In-memory secrets store for dynamically injected secrets
+    /// Component ID → (Secret Key → Secret Value)
+    memory_store: RwLock<HashMap<String, HashMap<String, SecretString>>>,
 }
 
 impl SecretsManager {
@@ -43,6 +48,7 @@ impl SecretsManager {
         Self {
             secrets_dir,
             cache: RwLock::new(HashMap::new()),
+            memory_store: RwLock::new(HashMap::new()),
         }
     }
 
@@ -338,6 +344,96 @@ impl SecretsManager {
             })?;
 
         Ok(())
+    }
+
+    /// Inject a secret into in-memory store (dynamic secret injection via IPC)
+    pub async fn inject_secret(
+        &self,
+        component_id: &str,
+        key: String,
+        value: String,
+    ) -> Result<()> {
+        let secret_value = SecretString::new(value.into());
+        let mut store = self.memory_store.write().await;
+        
+        let component_secrets = store.entry(component_id.to_string()).or_insert_with(HashMap::new);
+        component_secrets.insert(key.clone(), secret_value);
+        
+        info!("Injected secret '{}' for component: {}", key, component_id);
+        Ok(())
+    }
+
+    /// Remove a secret from in-memory store
+    pub async fn remove_memory_secret(&self, component_id: &str, key: &str) -> Result<()> {
+        let mut store = self.memory_store.write().await;
+        
+        if let Some(component_secrets) = store.get_mut(component_id) {
+            if let Some(secret) = component_secrets.remove(key) {
+                // Zeroize the secret before dropping
+                let mut exposed = secret.expose_secret().to_string();
+                exposed.zeroize();
+                info!("Removed memory secret '{}' for component: {}", key, component_id);
+                Ok(())
+            } else {
+                Err(anyhow!(
+                    "Memory secret '{}' not found for component: {}",
+                    key,
+                    component_id
+                ))
+            }
+        } else {
+            Err(anyhow!(
+                "No memory secrets found for component: {}",
+                component_id
+            ))
+        }
+    }
+
+    /// Get all secrets for a component (merged from file and memory)
+    /// Returns a combined map with memory secrets taking precedence over file-based secrets
+    pub async fn get_all_secrets(&self, component_id: &str) -> Result<HashMap<String, String>> {
+        let mut merged = HashMap::new();
+
+        // Start with file-based secrets (lower precedence)
+        let file_secrets = self.load_component_secrets(component_id).await?;
+        merged.extend(file_secrets);
+
+        // Overlay memory secrets (higher precedence)
+        let store = self.memory_store.read().await;
+        if let Some(memory_secrets) = store.get(component_id) {
+            for (key, secret_value) in memory_secrets {
+                merged.insert(key.clone(), secret_value.expose_secret().to_string());
+            }
+        }
+
+        Ok(merged)
+    }
+
+    /// List all secrets for a component (both file-based and memory)
+    pub async fn list_all_secrets(
+        &self,
+        component_id: &str,
+        show_values: bool,
+    ) -> Result<HashMap<String, Option<String>>> {
+        let mut result = HashMap::new();
+
+        // Add file-based secrets
+        let file_secrets = self.list_component_secrets(component_id, show_values).await?;
+        result.extend(file_secrets);
+
+        // Add memory secrets
+        let store = self.memory_store.read().await;
+        if let Some(memory_secrets) = store.get(component_id) {
+            for (key, secret_value) in memory_secrets {
+                if show_values {
+                    result.insert(key.clone(), Some(secret_value.expose_secret().to_string()));
+                } else {
+                    result.insert(key.clone(), None);
+                }
+            }
+        }
+
+        Ok(result)
     }
 }
 

@@ -40,6 +40,7 @@ pub enum IpcCommand {
         /// Component identifier
         component_id: String,
         /// Whether to include secret values in the response
+        #[serde(default)]
         show_values: bool,
     },
 }

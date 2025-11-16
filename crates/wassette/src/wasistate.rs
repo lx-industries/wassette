@@ -273,11 +273,8 @@ pub(crate) fn extract_env_vars(
         env_vars.extend(secrets_map.clone());
     }
 
-    // Add inherited environment vars (middle precedence)
-    // Note: This would require passing process environment, but for now
-    // we'll just add configured environment_vars which act as inherited
-
-    // Add policy-allowed environment variables (highest precedence)
+    // Add policy-allowed environment variables from environment_vars (higher precedence)
+    // These override secrets when keys conflict
     if let Some(env_perms) = &policy.permissions.environment {
         if let Some(env_allow_vec) = &env_perms.allow {
             for env_allow in env_allow_vec {

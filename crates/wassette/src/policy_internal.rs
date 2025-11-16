@@ -151,7 +151,8 @@ impl PolicyManager {
     async fn build_default_template(&self, component_id: &str) -> Arc<WasiStateTemplate> {
         let mut config_vars = self.environment_vars.as_ref().clone();
 
-        if let Ok(secrets) = self.secrets.load_component_secrets(component_id).await {
+        // Load both file-based and in-memory secrets
+        if let Ok(secrets) = self.secrets.get_all_secrets(component_id).await {
             for (key, value) in secrets {
                 config_vars.insert(key, value);
             }
@@ -189,7 +190,8 @@ impl PolicyManager {
         let metadata_path = self.metadata_path(component_id);
         tokio::fs::write(&metadata_path, serde_json::to_string_pretty(&metadata)?).await?;
 
-        let secrets = self.secrets.load_component_secrets(component_id).await.ok();
+        // Load both file-based and in-memory secrets
+        let secrets = self.secrets.get_all_secrets(component_id).await.ok();
 
         let wasi_template = crate::create_wasi_state_template_from_policy(
             &policy,
@@ -287,7 +289,8 @@ impl PolicyManager {
             return Ok(());
         }
 
-        let secrets = self.secrets.load_component_secrets(component_id).await.ok();
+        // Load both file-based and in-memory secrets
+        let secrets = self.secrets.get_all_secrets(component_id).await.ok();
 
         match tokio::fs::read_to_string(&policy_path).await {
             Ok(policy_content) => match PolicyParser::parse_str(&policy_content) {
