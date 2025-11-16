@@ -19,7 +19,11 @@ async fn test_inject_and_retrieve_secret() -> Result<()> {
 
     // Inject a secret into memory
     secrets_manager
-        .inject_secret("test-component", "API_KEY".to_string(), "secret123".to_string())
+        .inject_secret(
+            "test-component",
+            "API_KEY".to_string(),
+            "secret123".to_string(),
+        )
         .await?;
 
     // Retrieve all secrets (should include the injected one)
@@ -47,12 +51,19 @@ async fn test_memory_secret_precedence_over_file() -> Result<()> {
 
     // Inject a memory secret with the same key
     secrets_manager
-        .inject_secret("test-component", "API_KEY".to_string(), "memory_value".to_string())
+        .inject_secret(
+            "test-component",
+            "API_KEY".to_string(),
+            "memory_value".to_string(),
+        )
         .await?;
 
     // Retrieve all secrets - memory should override file
     let all_secrets = secrets_manager.get_all_secrets("test-component").await?;
-    assert_eq!(all_secrets.get("API_KEY"), Some(&"memory_value".to_string()));
+    assert_eq!(
+        all_secrets.get("API_KEY"),
+        Some(&"memory_value".to_string())
+    );
 
     Ok(())
 }
@@ -67,7 +78,11 @@ async fn test_remove_memory_secret() -> Result<()> {
 
     // Inject a secret
     secrets_manager
-        .inject_secret("test-component", "API_KEY".to_string(), "secret123".to_string())
+        .inject_secret(
+            "test-component",
+            "API_KEY".to_string(),
+            "secret123".to_string(),
+        )
         .await?;
 
     // Verify it's there
@@ -104,7 +119,11 @@ async fn test_list_all_secrets_combines_file_and_memory() -> Result<()> {
 
     // Inject a memory secret
     secrets_manager
-        .inject_secret("test-component", "MEMORY_KEY".to_string(), "memory_value".to_string())
+        .inject_secret(
+            "test-component",
+            "MEMORY_KEY".to_string(),
+            "memory_value".to_string(),
+        )
         .await?;
 
     // List all secrets
@@ -137,7 +156,11 @@ async fn test_list_all_secrets_with_values() -> Result<()> {
 
     // Inject a memory secret
     secrets_manager
-        .inject_secret("test-component", "MEMORY_KEY".to_string(), "memory_value".to_string())
+        .inject_secret(
+            "test-component",
+            "MEMORY_KEY".to_string(),
+            "memory_value".to_string(),
+        )
         .await?;
 
     // List all secrets with values
@@ -146,8 +169,14 @@ async fn test_list_all_secrets_with_values() -> Result<()> {
         .await?;
 
     assert_eq!(all_secrets.len(), 2);
-    assert_eq!(all_secrets.get("FILE_KEY"), Some(&Some("file_value".to_string())));
-    assert_eq!(all_secrets.get("MEMORY_KEY"), Some(&Some("memory_value".to_string())));
+    assert_eq!(
+        all_secrets.get("FILE_KEY"),
+        Some(&Some("file_value".to_string()))
+    );
+    assert_eq!(
+        all_secrets.get("MEMORY_KEY"),
+        Some(&Some("memory_value".to_string()))
+    );
 
     Ok(())
 }

@@ -355,10 +355,12 @@ impl SecretsManager {
     ) -> Result<()> {
         let secret_value = SecretString::new(value.into());
         let mut store = self.memory_store.write().await;
-        
-        let component_secrets = store.entry(component_id.to_string()).or_insert_with(HashMap::new);
+
+        let component_secrets = store
+            .entry(component_id.to_string())
+            .or_insert_with(HashMap::new);
         component_secrets.insert(key.clone(), secret_value);
-        
+
         info!("Injected secret '{}' for component: {}", key, component_id);
         Ok(())
     }
@@ -366,13 +368,16 @@ impl SecretsManager {
     /// Remove a secret from in-memory store
     pub async fn remove_memory_secret(&self, component_id: &str, key: &str) -> Result<()> {
         let mut store = self.memory_store.write().await;
-        
+
         if let Some(component_secrets) = store.get_mut(component_id) {
             if let Some(secret) = component_secrets.remove(key) {
                 // Zeroize the secret before dropping
                 let mut exposed = secret.expose_secret().to_string();
                 exposed.zeroize();
-                info!("Removed memory secret '{}' for component: {}", key, component_id);
+                info!(
+                    "Removed memory secret '{}' for component: {}",
+                    key, component_id
+                );
                 Ok(())
             } else {
                 Err(anyhow!(
@@ -418,7 +423,9 @@ impl SecretsManager {
         let mut result = HashMap::new();
 
         // Add file-based secrets
-        let file_secrets = self.list_component_secrets(component_id, show_values).await?;
+        let file_secrets = self
+            .list_component_secrets(component_id, show_values)
+            .await?;
         result.extend(file_secrets);
 
         // Add memory secrets

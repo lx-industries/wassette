@@ -322,7 +322,7 @@ pub struct ComponentInstance {
 /// Attempt to extract missing environment variable names from error messages
 fn extract_missing_env_vars(error_message: &str) -> Vec<String> {
     let mut missing_vars = Vec::new();
-    
+
     // Common patterns for missing environment variable errors
     let patterns = [
         // WASI error: "environment variable not found: API_KEY"
@@ -334,7 +334,7 @@ fn extract_missing_env_vars(error_message: &str) -> Vec<String> {
         // Other variations
         r"variable\s+([A-Z_][A-Z0-9_]*)\s+not\s+found",
     ];
-    
+
     for pattern in &patterns {
         if let Ok(re) = regex::Regex::new(pattern) {
             for cap in re.captures_iter(error_message) {
@@ -344,7 +344,7 @@ fn extract_missing_env_vars(error_message: &str) -> Vec<String> {
             }
         }
     }
-    
+
     missing_vars
 }
 
@@ -352,7 +352,7 @@ fn extract_missing_env_vars(error_message: &str) -> Vec<String> {
 fn enhance_missing_secret_error(component_id: &str, error: anyhow::Error) -> anyhow::Error {
     let error_msg = error.to_string();
     let missing_vars = extract_missing_env_vars(&error_msg);
-    
+
     if !missing_vars.is_empty() {
         let vars_list = missing_vars.join(", ");
         let hint = format!(
@@ -361,9 +361,13 @@ fn enhance_missing_secret_error(component_id: &str, error: anyhow::Error) -> any
             wassette secret set --component {} {}",
             vars_list,
             component_id,
-            missing_vars.iter().map(|v| format!("{}=value", v)).collect::<Vec<_>>().join(" ")
+            missing_vars
+                .iter()
+                .map(|v| format!("{}=value", v))
+                .collect::<Vec<_>>()
+                .join(" ")
         );
-        
+
         anyhow!("{}{}", error_msg, hint)
     } else {
         error
