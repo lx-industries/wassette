@@ -153,10 +153,17 @@ pub trait Loadable: Sized {
     const RESOURCE_TYPE: &'static str;
 
     async fn from_local_file(path: &Path) -> Result<DownloadedResource>;
+    #[allow(dead_code)]
     async fn from_oci_reference_with_progress(
         reference: &str,
         oci_client: &oci_client::Client,
         show_progress: bool,
+    ) -> Result<DownloadedResource>;
+    async fn from_oci_reference_with_progress_and_credentials(
+        reference: &str,
+        oci_client: &oci_client::Client,
+        show_progress: bool,
+        credentials: Option<crate::oci_auth::OciCredentials>,
     ) -> Result<DownloadedResource>;
     async fn from_url(url: &str, http_client: &reqwest::Client) -> Result<DownloadedResource>;
 }
@@ -193,6 +200,15 @@ impl Loadable for ComponentResource {
         oci_client: &oci_client::Client,
         show_progress: bool,
     ) -> Result<DownloadedResource> {
+        Self::from_oci_reference_with_progress_and_credentials(reference, oci_client, show_progress, None).await
+    }
+
+    async fn from_oci_reference_with_progress_and_credentials(
+        reference: &str,
+        oci_client: &oci_client::Client,
+        show_progress: bool,
+        credentials: Option<crate::oci_auth::OciCredentials>,
+    ) -> Result<DownloadedResource> {
         let reference: oci_client::Reference =
             reference.parse().context("Failed to parse OCI reference")?;
 
@@ -201,7 +217,7 @@ impl Loadable for ComponentResource {
         }
 
         // Get authentication credentials for this registry
-        let auth = crate::oci_auth::get_registry_auth(&reference)
+        let auth = crate::oci_auth::get_registry_auth_with_credentials(&reference, credentials)
             .context("Failed to get registry authentication")?;
 
         // First try oci-wasm for backwards compatibility with single-layer artifacts
@@ -344,6 +360,15 @@ impl Loadable for PolicyResource {
         bail!("OCI references are not supported for policy resources. Use 'file://' or 'https://' schemes instead.")
     }
 
+    async fn from_oci_reference_with_progress_and_credentials(
+        _reference: &str,
+        _oci_client: &oci_client::Client,
+        _show_progress: bool,
+        _credentials: Option<crate::oci_auth::OciCredentials>,
+    ) -> Result<DownloadedResource> {
+        bail!("OCI references are not supported for policy resources. Use 'file://' or 'https://' schemes instead.")
+    }
+
     async fn from_url(url: &str, http_client: &reqwest::Client) -> Result<DownloadedResource> {
         let url_obj = reqwest::Url::parse(url)?;
         let filename = url_obj
@@ -393,6 +418,17 @@ pub(crate) async fn load_resource_with_progress<T: Loadable>(
     http_client: &reqwest::Client,
     show_progress: bool,
 ) -> Result<DownloadedResource> {
+    load_resource_with_progress_and_credentials::<T>(uri, oci_client, http_client, show_progress, None).await
+}
+
+/// Generic resource loading function with optional progress reporting and credentials
+pub(crate) async fn load_resource_with_progress_and_credentials<T: Loadable>(
+    uri: &str,
+    oci_client: &oci_wasm::WasmClient,
+    http_client: &reqwest::Client,
+    show_progress: bool,
+    credentials: Option<crate::oci_auth::OciCredentials>,
+) -> Result<DownloadedResource> {
     let uri = uri.trim();
     let error_message = format!(
         "Invalid {} reference. Should be of the form scheme://reference",
@@ -402,7 +438,7 @@ pub(crate) async fn load_resource_with_progress<T: Loadable>(
 
     match scheme {
         "file" => T::from_local_file(Path::new(reference)).await,
-        "oci" => T::from_oci_reference_with_progress(reference, oci_client, show_progress).await,
+        "oci" => T::from_oci_reference_with_progress_and_credentials(reference, oci_client, show_progress, credentials).await,
         "https" => T::from_url(uri, http_client).await,
         _ => bail!("Unsupported {} scheme: {}", T::RESOURCE_TYPE, scheme),
     }

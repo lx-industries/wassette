@@ -46,6 +46,7 @@ use policy_internal::PolicyManager;
 pub use policy_internal::{PermissionGrantRequest, PermissionRule, PolicyInfo};
 use runtime_context::RuntimeContext;
 pub use secrets::SecretsManager;
+pub use oci_auth::OciCredentials;
 use wasistate::WasiState;
 pub use wasistate::{
     create_wasi_state_template_from_policy, CustomResourceLimiter, PermissionError,
@@ -424,15 +425,26 @@ impl LifecycleManager {
         self.policy_manager.restore_from_disk(component_id).await
     }
 
+    #[allow(dead_code)]
     async fn resolve_component_resource(&self, uri: &str) -> Result<(String, DownloadedResource)> {
+        self.resolve_component_resource_with_credentials(uri, None)
+            .await
+    }
+
+    async fn resolve_component_resource_with_credentials(
+        &self,
+        uri: &str,
+        credentials: Option<OciCredentials>,
+    ) -> Result<(String, DownloadedResource)> {
         // Show progress when running in CLI mode (stderr is a TTY)
         let show_progress = std::io::stderr().is_terminal();
 
-        let resource = loader::load_resource_with_progress::<ComponentResource>(
+        let resource = loader::load_resource_with_progress_and_credentials::<ComponentResource>(
             uri,
             &self.oci_client,
             &self.http_client,
             show_progress,
+            credentials,
         )
         .await?;
         let id = resource.id()?;
@@ -527,8 +539,29 @@ impl LifecycleManager {
     /// component and whether it replaced an existing instance.
     #[instrument(skip(self))]
     pub async fn load_component(&self, uri: &str) -> Result<ComponentLoadOutcome> {
+        self.load_component_with_credentials(uri, None).await
+    }
+
+    /// Loads a WebAssembly component from the specified URI with optional explicit credentials
+    ///
+    /// If a component with the given id already exists, it will be updated with the new component.
+    /// Returns rich [`ComponentLoadOutcome`] information describing the loaded
+    /// component and whether it replaced an existing instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `uri` - The URI to load the component from (file://, oci://, or https://)
+    /// * `credentials` - Optional explicit OCI registry credentials (takes priority over Docker config)
+    #[instrument(skip(self))]
+    pub async fn load_component_with_credentials(
+        &self,
+        uri: &str,
+        credentials: Option<OciCredentials>,
+    ) -> Result<ComponentLoadOutcome> {
         debug!(uri, "Loading component");
-        let (component_id, resource) = self.resolve_component_resource(uri).await?;
+        let (component_id, resource) = self
+            .resolve_component_resource_with_credentials(uri, credentials)
+            .await?;
         let staged_path = self
             .stage_component_artifact(&component_id, resource)
             .await?;

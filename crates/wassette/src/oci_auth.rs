@@ -13,6 +13,15 @@ use oci_client::secrets::RegistryAuth;
 use oci_client::Reference;
 use tracing::{debug, warn};
 
+/// OCI registry credentials provided explicitly via CLI or environment variables
+#[derive(Debug, Clone)]
+pub struct OciCredentials {
+    /// Registry username
+    pub username: String,
+    /// Registry password or token
+    pub password: String,
+}
+
 /// Get authentication credentials for an OCI registry reference
 ///
 /// This function attempts to read credentials from the Docker config file
@@ -39,6 +48,46 @@ use tracing::{debug, warn};
 /// Returns an error if the Docker config file exists but cannot be parsed
 /// or if credential retrieval fails for reasons other than missing config.
 pub fn get_registry_auth(reference: &Reference) -> Result<RegistryAuth> {
+    get_registry_auth_with_credentials(reference, None)
+}
+
+/// Get authentication credentials for an OCI registry reference with optional explicit credentials
+///
+/// This function implements a priority-based credential resolution:
+///
+/// 1. Use explicit credentials if provided (CLI flags or environment variables)
+/// 2. Fall back to Docker config file credentials
+/// 3. Fall back to Anonymous if no credentials are found
+///
+/// # Arguments
+///
+/// * `reference` - The OCI reference to get credentials for
+/// * `explicit_credentials` - Optional explicit credentials from CLI flags
+///
+/// # Returns
+///
+/// Returns a `RegistryAuth` enum that can be one of:
+/// - `Anonymous` - No credentials found
+/// - `Basic(username, password)` - Username/password credentials
+///
+/// # Errors
+///
+/// Returns an error if the Docker config file exists but cannot be parsed
+/// or if credential retrieval fails for reasons other than missing config.
+pub fn get_registry_auth_with_credentials(
+    reference: &Reference,
+    explicit_credentials: Option<OciCredentials>,
+) -> Result<RegistryAuth> {
+    // Priority 1: Use explicit credentials if provided
+    if let Some(creds) = explicit_credentials {
+        debug!(
+            "Using explicit credentials for registry: {}",
+            reference.resolve_registry()
+        );
+        return Ok(RegistryAuth::Basic(creds.username, creds.password));
+    }
+
+    // Priority 2: Try Docker config file
     // Get the registry server address from the reference
     // Strip trailing slash if present for consistent matching
     let server = reference

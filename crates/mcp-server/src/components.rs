@@ -11,7 +11,7 @@ use rmcp::{Peer, RoleServer};
 use serde_json::{json, Value};
 use tracing::{debug, error, info, instrument};
 use wassette::schema::{canonicalize_output_schema, ensure_structured_result};
-use wassette::{ComponentLoadOutcome, LifecycleManager, LoadResult};
+use wassette::{ComponentLoadOutcome, LifecycleManager, LoadResult, OciCredentials};
 
 #[instrument(skip(lifecycle_manager))]
 pub(crate) async fn get_component_tools(lifecycle_manager: &LifecycleManager) -> Result<Vec<Tool>> {
@@ -389,6 +389,16 @@ pub async fn handle_load_component_cli(
     req: &CallToolRequestParam,
     lifecycle_manager: &LifecycleManager,
 ) -> Result<CallToolResult> {
+    handle_load_component_cli_with_credentials(req, lifecycle_manager, None).await
+}
+
+/// CLI-specific version of handle_load_component with optional credentials
+#[instrument(skip(lifecycle_manager))]
+pub async fn handle_load_component_cli_with_credentials(
+    req: &CallToolRequestParam,
+    lifecycle_manager: &LifecycleManager,
+    credentials: Option<OciCredentials>,
+) -> Result<CallToolResult> {
     let args = extract_args_from_request(req)?;
     let path = args
         .get("path")
@@ -397,7 +407,7 @@ pub async fn handle_load_component_cli(
 
     info!(path, "Loading component (CLI mode)");
 
-    match lifecycle_manager.load_component(path).await {
+    match lifecycle_manager.load_component_with_credentials(path, credentials).await {
         Ok(outcome) => {
             handle_tool_list_notification(None, &outcome.component_id, "load").await;
             create_load_component_success_result(&outcome)

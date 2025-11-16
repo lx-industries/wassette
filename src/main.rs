@@ -16,6 +16,7 @@ use rmcp::transport::{stdio as stdio_transport, SseServer};
 use serde_json::{json, Map};
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
+use wassette::OciCredentials;
 
 mod cli_handlers;
 mod commands;
@@ -274,18 +275,58 @@ async fn main() -> Result<()> {
                 ComponentCommands::Load {
                     path,
                     component_dir,
+                    registry_user,
+                    registry_password,
+                    registry_password_stdin,
                 } => {
+                    // Validate credentials pairing
+                    if registry_user.is_some() != registry_password.is_some() && !registry_password_stdin {
+                        bail!("Both --registry-user and --registry-password (or --registry-password-stdin) must be provided together");
+                    }
+
+                    // Read password from stdin if requested
+                    let password = if *registry_password_stdin {
+                        if registry_user.is_none() {
+                            bail!("--registry-user must be provided when using --registry-password-stdin");
+                        }
+                        use std::io::Read;
+                        let mut buffer = String::new();
+                        std::io::stdin().read_to_string(&mut buffer)
+                            .context("Failed to read password from stdin")?;
+                        Some(buffer.trim().to_string())
+                    } else {
+                        registry_password.clone()
+                    };
+
+                    // Create credentials if username and password are provided
+                    let credentials = if let (Some(username), Some(pwd)) = (registry_user, &password) {
+                        Some(OciCredentials {
+                            username: username.clone(),
+                            password: pwd.clone(),
+                        })
+                    } else {
+                        None
+                    };
+
                     let component_dir = component_dir.clone().or_else(|| cli.component_dir.clone());
                     let lifecycle_manager = create_lifecycle_manager(component_dir).await?;
                     let mut args = Map::new();
                     args.insert("path".to_string(), json!(path));
-                    handle_tool_cli_command(
+                    
+                    // Use the new handler with credentials
+                    use mcp_server::components::handle_load_component_cli_with_credentials;
+                    use rmcp::model::CallToolRequestParam;
+                    let req = CallToolRequestParam {
+                        name: "load-component".to_string().into(),
+                        arguments: Some(args),
+                    };
+                    let result = handle_load_component_cli_with_credentials(
+                        &req,
                         &lifecycle_manager,
-                        "load-component",
-                        args,
-                        OutputFormat::Json,
+                        credentials,
                     )
                     .await?;
+                    print_result(&result, OutputFormat::Json)?;
                 }
                 ComponentCommands::Unload { id, component_dir } => {
                     let component_dir = component_dir.clone().or_else(|| cli.component_dir.clone());

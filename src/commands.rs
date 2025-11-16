@@ -177,6 +177,15 @@ pub enum ComponentCommands {
         /// Directory where components are stored. Defaults to $XDG_DATA_HOME/wassette/components
         #[arg(long)]
         component_dir: Option<PathBuf>,
+        /// Registry username for OCI authentication
+        #[arg(long, env = "OCI_REGISTRY_USER")]
+        registry_user: Option<String>,
+        /// Registry password for OCI authentication (use --registry-password-stdin for better security)
+        #[arg(long, env = "OCI_REGISTRY_PASSWORD")]
+        registry_password: Option<String>,
+        /// Read registry password from stdin
+        #[arg(long, conflicts_with = "registry_password")]
+        registry_password_stdin: bool,
     },
     /// Unload a WebAssembly component.
     Unload {
