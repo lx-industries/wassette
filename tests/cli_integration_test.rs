@@ -900,3 +900,81 @@ async fn test_cli_autocomplete_includes_all_commands() -> Result<()> {
 
     Ok(())
 }
+
+#[test(tokio::test)]
+async fn test_cli_component_load_with_incomplete_credentials() -> Result<()> {
+    let ctx = CliTestContext::new().await?;
+
+    // Test with only username (should fail validation)
+    let (_stdout, stderr, exit_code) = ctx
+        .run_command(&[
+            "component",
+            "load",
+            "oci://ghcr.io/test/image:latest",
+            "--registry-user",
+            "testuser",
+        ])
+        .await?;
+
+    assert_ne!(exit_code, 0, "Command should fail with incomplete credentials");
+    assert!(
+        stderr.contains("Both --registry-user and --registry-password") ||
+        stderr.contains("must be provided together"),
+        "Error message should mention incomplete credentials. Got: {stderr}"
+    );
+
+    // Test with only password (should fail validation)
+    let (_stdout2, stderr2, exit_code2) = ctx
+        .run_command(&[
+            "component",
+            "load",
+            "oci://ghcr.io/test/image:latest",
+            "--registry-password",
+            "testpass",
+        ])
+        .await?;
+
+    assert_ne!(exit_code2, 0, "Command should fail with incomplete credentials");
+    assert!(
+        stderr2.contains("Both --registry-user and --registry-password") ||
+        stderr2.contains("must be provided together"),
+        "Error message should mention incomplete credentials. Got: {stderr2}"
+    );
+
+    Ok(())
+}
+
+#[test(tokio::test)]
+async fn test_cli_component_load_help_shows_registry_flags() -> Result<()> {
+    let ctx = CliTestContext::new().await?;
+
+    let (stdout, _stderr, exit_code) = ctx
+        .run_command(&["component", "load", "--help"])
+        .await?;
+
+    assert_eq!(exit_code, 0, "Help command should succeed");
+
+    // Verify all new flags are documented
+    assert!(
+        stdout.contains("--registry-user"),
+        "Help should document --registry-user flag"
+    );
+    assert!(
+        stdout.contains("--registry-password"),
+        "Help should document --registry-password flag"
+    );
+    assert!(
+        stdout.contains("--registry-password-stdin"),
+        "Help should document --registry-password-stdin flag"
+    );
+    assert!(
+        stdout.contains("OCI_REGISTRY_USER"),
+        "Help should mention OCI_REGISTRY_USER environment variable"
+    );
+    assert!(
+        stdout.contains("OCI_REGISTRY_PASSWORD"),
+        "Help should mention OCI_REGISTRY_PASSWORD environment variable"
+    );
+
+    Ok(())
+}
