@@ -211,7 +211,6 @@ dependencies = [
  "spin-sdk",
  "url",
  "wit-bindgen 0.47.0",
- "wit-bindgen-rt",
 ]
 
 [[package]]
@@ -1519,15 +1518,6 @@ dependencies = [
  "anyhow",
  "heck 0.5.0",
  "wit-parser 0.240.0",
-]
-
-[[package]]
-name = "wit-bindgen-rt"
-version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29c7526379ace8709ee9ab9f2bb50f112d95581063a59ef3097d9c10153886c9"
-dependencies = [
- "bitflags",
 ]
 
 [[package]]
