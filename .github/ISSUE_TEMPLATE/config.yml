@@ -4,7 +4,7 @@ contact_links:
     url: https://github.com/microsoft/wassette/discussions
     about: Ask questions and discuss ideas with the community
   - name: 📖 Documentation
-    url: https://microsoft.github.io/wassette/
+    url: https://microsoft.github.io/wassette/latest/
     about: Read the official Wassette documentation
   - name: 🔒 Private Security Report
     url: https://github.com/microsoft/wassette/security/advisories/new

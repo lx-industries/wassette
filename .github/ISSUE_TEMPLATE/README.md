@@ -129,7 +129,7 @@ To validate all templates:
 
 ```bash
 for file in .github/ISSUE_TEMPLATE/*.yml; do 
-    python3 -c "import yaml; yaml.safe_load(open('$file'))" && echo "✓ $file" || echo "✗ $file"
+    python3 -c "import yaml; yaml.safe_load(open(\"$file\"))" && echo "✓ $file" || echo "✗ $file"
 done
 ```
 
