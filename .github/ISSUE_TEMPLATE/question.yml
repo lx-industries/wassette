@@ -67,7 +67,6 @@ body:
       label: Relevant Code or Configuration
       description: If applicable, share relevant code, commands, or configuration
       placeholder: Paste code or configuration here
-      render: shell
 
   - type: checkboxes
     id: checklist

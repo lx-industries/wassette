@@ -74,7 +74,6 @@ body:
         # Example command or usage
         wassette ...
         ```
-      render: shell
 
   - type: checkboxes
     id: breaking-changes
