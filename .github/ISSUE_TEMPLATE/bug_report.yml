@@ -53,7 +53,6 @@ body:
       label: Error Logs
       description: If applicable, add error messages or logs
       placeholder: Paste error logs here
-      render: shell
 
   - type: input
     id: version

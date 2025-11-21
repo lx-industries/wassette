@@ -70,7 +70,6 @@ body:
       label: Current Content
       description: If applicable, quote the current documentation that needs changing
       placeholder: Paste the current text here
-      render: markdown
 
   - type: textarea
     id: suggested-content
@@ -78,7 +77,6 @@ body:
       label: Suggested Improvement
       description: How should this be changed or what should be added?
       placeholder: Provide your suggested text or outline
-      render: markdown
 
   - type: textarea
     id: additional-context
