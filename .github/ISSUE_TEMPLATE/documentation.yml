@@ -1,0 +1,88 @@
+name: Documentation Improvement
+description: Suggest improvements or report issues with documentation
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Wassette's documentation! Clear docs help everyone.
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation needs improvement?
+      options:
+        - README
+        - Getting Started Guide
+        - Installation Instructions
+        - API Reference
+        - CLI Reference
+        - Architecture Documentation
+        - Design Documents
+        - Examples
+        - Contributing Guidelines
+        - Code Comments
+        - Other (please specify below)
+    validations:
+      required: true
+
+  - type: input
+    id: doc-location
+    attributes:
+      label: Document Location
+      description: Which file or page needs updating?
+      placeholder: "e.g., docs/installation.md, README.md section 'Using Wassette'"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What kind of documentation issue is this?
+      options:
+        - Missing information
+        - Incorrect information
+        - Outdated information
+        - Unclear explanation
+        - Typo or grammar
+        - Broken link
+        - Missing example
+        - Needs more detail
+        - Other (please specify below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the documentation issue or improvement
+      placeholder: What's wrong or what could be better?
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-content
+    attributes:
+      label: Current Content
+      description: If applicable, quote the current documentation that needs changing
+      placeholder: Paste the current text here
+      render: markdown
+
+  - type: textarea
+    id: suggested-content
+    attributes:
+      label: Suggested Improvement
+      description: How should this be changed or what should be added?
+      placeholder: Provide your suggested text or outline
+      render: markdown
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context, screenshots, or references
+      placeholder: Links, screenshots, or additional details

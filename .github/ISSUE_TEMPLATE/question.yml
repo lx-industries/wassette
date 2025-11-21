@@ -1,0 +1,81 @@
+name: Question / Help
+description: Ask a question or get help using Wassette
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? We're here to help! Please check the [documentation](https://microsoft.github.io/wassette/) first.
+        
+        For general discussion, consider using [GitHub Discussions](https://github.com/microsoft/wassette/discussions).
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: Ask your question here
+    validations:
+      required: true
+
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic Area
+      description: What is your question about?
+      options:
+        - Getting Started
+        - Installation
+        - Component Development
+        - Component Loading
+        - Permissions and Security
+        - MCP Protocol
+        - CLI Usage
+        - Configuration
+        - Performance
+        - Troubleshooting
+        - Best Practices
+        - Examples
+        - Other (please specify below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-tried
+    attributes:
+      label: What Have You Tried?
+      description: What steps have you already taken to solve this?
+      placeholder: |
+        - Checked documentation at...
+        - Tried command...
+        - Searched issues for...
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide any relevant context about your setup or use case
+      placeholder: |
+        - Wassette version:
+        - Operating system:
+        - What you're trying to accomplish:
+
+  - type: textarea
+    id: code-config
+    attributes:
+      label: Relevant Code or Configuration
+      description: If applicable, share relevant code, commands, or configuration
+      placeholder: Paste code or configuration here
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Before submitting, please verify
+      options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have checked the documentation
+          required: true

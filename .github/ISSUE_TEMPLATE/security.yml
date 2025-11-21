@@ -1,0 +1,90 @@
+name: Security Issue
+description: Report a security vulnerability (use private reporting for sensitive issues)
+title: "[Security]: "
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ Important Security Notice
+        
+        **For sensitive security vulnerabilities**, please use [GitHub's private vulnerability reporting](https://github.com/microsoft/wassette/security/advisories/new) instead of filing a public issue.
+        
+        See our [Security Policy](https://github.com/microsoft/wassette/security/policy) for more information.
+        
+        Use this template only for non-sensitive security improvements or discussions.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Issue Severity
+      description: How would you rate the severity?
+      options:
+        - Low - Security improvement suggestion
+        - Medium - Potential security concern
+        - High - Should use private reporting
+        - Critical - MUST use private reporting
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the security concern or improvement
+      placeholder: |
+        Please describe the security issue or improvement suggestion.
+        DO NOT include sensitive exploit details in public issues.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Security Category
+      description: What type of security issue is this?
+      options:
+        - Permission System
+        - Component Isolation
+        - Network Access Control
+        - Authentication/Authorization
+        - Input Validation
+        - Dependency Security
+        - Documentation/Best Practices
+        - Policy Configuration
+        - Secret Management
+        - Other (please specify)
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Potential Impact
+      description: What is the potential impact if this is exploited?
+      placeholder: Describe the potential impact or risk
+
+  - type: textarea
+    id: affected-versions
+    attributes:
+      label: Affected Versions
+      description: Which versions of Wassette are affected?
+      placeholder: "e.g., all versions, v0.3.0 and later"
+
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Suggested Mitigation
+      description: If you have suggestions for fixing or mitigating this issue
+      placeholder: How could this be addressed?
+
+  - type: checkboxes
+    id: responsible-disclosure
+    attributes:
+      label: Responsible Disclosure
+      description: Please confirm
+      options:
+        - label: I understand that sensitive vulnerabilities should use private reporting
+          required: true
+        - label: This issue does not contain exploit code or sensitive details
+          required: true

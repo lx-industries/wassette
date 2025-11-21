@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/microsoft/wassette/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📖 Documentation
+    url: https://microsoft.github.io/wassette/
+    about: Read the official Wassette documentation
+  - name: 🔒 Private Security Report
+    url: https://github.com/microsoft/wassette/security/advisories/new
+    about: Report a security vulnerability privately
+  - name: 💼 Microsoft Open Source Code of Conduct
+    url: https://opensource.microsoft.com/codeofconduct/
+    about: Learn about our community guidelines

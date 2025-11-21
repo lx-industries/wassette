@@ -1,0 +1,108 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in Wassette
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the sections below to help us understand and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Tell us what happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Run command '...'
+        2. Load component '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: What should have happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: What actually happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: If applicable, add error messages or logs
+      placeholder: Paste error logs here
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Wassette Version
+      description: What version of Wassette are you using?
+      placeholder: "e.g., 0.3.3, main branch"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (please specify in additional context)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation-method
+    attributes:
+      label: Installation Method
+      description: How did you install Wassette?
+      options:
+        - Cargo (from crates.io)
+        - Built from source
+        - Homebrew
+        - WinGet
+        - Docker
+        - Other (please specify in additional context)
+
+  - type: textarea
+    id: component-info
+    attributes:
+      label: Component Information
+      description: If the issue is related to a specific component, provide details
+      placeholder: |
+        Component name: 
+        Component URI:
+        Component source (OCI/local/etc):
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here
+      placeholder: Any additional information that might help
