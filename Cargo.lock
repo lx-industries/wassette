@@ -4113,9 +4113,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.3.20"
+version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2054a14f5307d601f88daf0553e1cbf472acc4f2c51afab632431cdcd72124d5"
+checksum = "2f30143827ddab0d256fd843b7a66d164e9f271cfa0dde49142c5ca0ca291f1e"
 dependencies = [
  "matchers",
  "nu-ansi-term",
@@ -4492,15 +4492,26 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.242.0"
+version = "0.240.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed3c6e611f4cd748d85c767815823b777dc56afca793fcda27beae4e85028849"
+checksum = "b722dcf61e0ea47440b53ff83ccb5df8efec57a69d150e4f24882e4eba7e24a4"
 dependencies = [
  "bitflags",
  "hashbrown 0.15.5",
  "indexmap 2.12.0",
  "semver",
  "serde",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.242.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed3c6e611f4cd748d85c767815823b777dc56afca793fcda27beae4e85028849"
+dependencies = [
+ "bitflags",
+ "indexmap 2.12.0",
+ "semver",
 ]
 
 [[package]]
