@@ -5,11 +5,78 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use thiserror::Error;
 use wasmparser::{Parser, Payload};
 use wasmtime::component::types::{ComponentFunc, ComponentItem};
-use wasmtime::component::{Component, Type, Val};
+use wasmtime::component::{Component, ResourceAny, Type, Val};
 use wasmtime::Engine;
+
+/// A table for tracking resource handles during JSON serialization/deserialization.
+///
+/// Resources in the WebAssembly Component Model are opaque handles that cannot be
+/// directly serialized to JSON. This table maps integer handles to `ResourceAny`
+/// values, enabling resources to be passed as integers in MCP tool calls.
+///
+/// # Lifecycle
+///
+/// Handles are allocated when resources are returned from component calls via
+/// [`vals_to_json`]. They can be passed back to components via [`json_to_vals`]
+/// and should be cleaned up when the session ends or the resource is explicitly
+/// dropped.
+#[derive(Debug, Default)]
+pub struct ResourceHandleTable {
+    resources: HashMap<u64, ResourceAny>,
+    next_handle: u64,
+}
+
+impl ResourceHandleTable {
+    /// Creates a new empty resource handle table.
+    pub fn new() -> Self {
+        Self {
+            resources: HashMap::new(),
+            next_handle: 1,
+        }
+    }
+
+    /// Inserts a resource into the table and returns its handle.
+    ///
+    /// Handles start at 1 (0 is reserved for null/invalid).
+    pub fn insert(&mut self, resource: ResourceAny) -> u64 {
+        let handle = self.next_handle;
+        self.next_handle += 1;
+        self.resources.insert(handle, resource);
+        handle
+    }
+
+    /// Gets a reference to a resource by its handle.
+    pub fn get(&self, handle: u64) -> Option<&ResourceAny> {
+        self.resources.get(&handle)
+    }
+
+    /// Removes and returns a resource from the table.
+    ///
+    /// Use this when the resource should be consumed (e.g., for `own` types).
+    pub fn take(&mut self, handle: u64) -> Option<ResourceAny> {
+        self.resources.remove(&handle)
+    }
+
+    /// Returns the number of resources currently in the table.
+    pub fn len(&self) -> usize {
+        self.resources.len()
+    }
+
+    /// Returns true if the table is empty.
+    pub fn is_empty(&self) -> bool {
+        self.resources.is_empty()
+    }
+
+    /// Clears all resources from the table.
+    pub fn clear(&mut self) {
+        self.resources.clear();
+        self.next_handle = 1;
+    }
+}
 
 /// Function identifier for tools, containing WIT package, WIT interface, and function names.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -252,18 +319,24 @@ pub fn component_exports_to_json_schema_with_docs(
 }
 
 /// Converts a slice of component model [`Val`] objects into a JSON representation.
-pub fn vals_to_json(vals: &[Val]) -> Value {
+///
+/// # Resource Handling
+///
+/// When a `Val::Resource` is encountered, it is stored in the provided `handles` table
+/// and serialized as an integer handle. This handle can later be passed back to the
+/// component via [`json_to_vals`] to reference the same resource.
+pub fn vals_to_json(vals: &[Val], handles: &mut ResourceHandleTable) -> Value {
     match vals.len() {
         0 => Value::Null,
         1 => {
             let mut wrapper = Map::new();
-            wrapper.insert("result".to_string(), val_to_json(&vals[0]));
+            wrapper.insert("result".to_string(), val_to_json(&vals[0], handles));
             Value::Object(wrapper)
         }
         _ => {
             let mut tuple_map = Map::new();
             for (i, v) in vals.iter().enumerate() {
-                tuple_map.insert(format!("val{i}"), val_to_json(v));
+                tuple_map.insert(format!("val{i}"), val_to_json(v, handles));
             }
 
             let mut wrapper = Map::new();
@@ -275,7 +348,17 @@ pub fn vals_to_json(vals: &[Val]) -> Value {
 
 /// Converts a JSON object to a vector of `Val` objects based on the provided type mappings for each
 /// field.
-pub fn json_to_vals(value: &Value, types: &[(String, Type)]) -> Result<Vec<Val>, ValError> {
+///
+/// # Resource Handling
+///
+/// When a resource type is expected and an integer is provided, the handle is looked up
+/// in the `handles` table to retrieve the actual resource. This allows resources returned
+/// from previous calls (via [`vals_to_json`]) to be passed back to the component.
+pub fn json_to_vals(
+    value: &Value,
+    types: &[(String, Type)],
+    handles: &mut ResourceHandleTable,
+) -> Result<Vec<Val>, ValError> {
     match value {
         Value::Object(obj) => {
             let mut results = Vec::new();
@@ -283,7 +366,7 @@ pub fn json_to_vals(value: &Value, types: &[(String, Type)]) -> Result<Vec<Val>,
                 let value = obj.get(name).ok_or_else(|| {
                     ValError::ShapeError("object", format!("missing field {name}"))
                 })?;
-                results.push(json_to_val(value, ty)?);
+                results.push(json_to_val(value, ty, handles)?);
             }
             Ok(results)
         }
@@ -440,14 +523,14 @@ fn type_to_json_schema(t: &Type) -> Value {
 
         Type::Own(r) => {
             json!({
-                "type": "string",
-                "description": format!("own'd resource: {:?}", r)
+                "type": "integer",
+                "description": format!("Handle to owned resource: {:?}", r)
             })
         }
         Type::Borrow(r) => {
             json!({
-                "type": "string",
-                "description": format!("borrow'd resource: {:?}", r)
+                "type": "integer",
+                "description": format!("Handle to borrowed resource: {:?}", r)
             })
         }
         Type::Future(_) => {
@@ -650,7 +733,7 @@ fn gather_exported_functions_with_metadata_internal(
     }
 }
 
-fn val_to_json(val: &Val) -> Value {
+fn val_to_json(val: &Val, handles: &mut ResourceHandleTable) -> Value {
     match val {
         Val::Bool(b) => Value::Bool(*b),
         Val::S8(n) => Value::Number((*n as i64).into()),
@@ -670,35 +753,39 @@ fn val_to_json(val: &Val) -> Value {
         Val::Char(c) => Value::String(c.to_string()),
         Val::String(s) => Value::String(s.clone()),
 
-        Val::List(list) => Value::Array(list.iter().map(val_to_json).collect()),
+        Val::List(list) => {
+            Value::Array(list.iter().map(|v| val_to_json(v, handles)).collect())
+        }
         Val::Record(fields) => {
             let mut map = Map::new();
             for (k, v) in fields {
-                map.insert(k.clone(), val_to_json(v));
+                map.insert(k.clone(), val_to_json(v, handles));
             }
             Value::Object(map)
         }
-        Val::Tuple(items) => Value::Array(items.iter().map(val_to_json).collect()),
+        Val::Tuple(items) => {
+            Value::Array(items.iter().map(|v| val_to_json(v, handles)).collect())
+        }
 
         Val::Variant(tag, payload) => {
             let mut obj = Map::new();
             obj.insert("tag".to_string(), Value::String(tag.clone()));
             if let Some(val_box) = payload {
-                obj.insert("val".to_string(), val_to_json(val_box));
+                obj.insert("val".to_string(), val_to_json(val_box, handles));
             }
             Value::Object(obj)
         }
         Val::Enum(s) => Value::String(s.clone()),
 
         Val::Option(None) => Value::Null,
-        Val::Option(Some(val_box)) => val_to_json(val_box),
+        Val::Option(Some(val_box)) => val_to_json(val_box, handles),
 
         Val::Result(Ok(opt_box)) => {
             let mut obj = Map::new();
             obj.insert(
                 "ok".to_string(),
                 match opt_box {
-                    Some(v) => val_to_json(v),
+                    Some(v) => val_to_json(v, handles),
                     None => Value::Null,
                 },
             );
@@ -709,7 +796,7 @@ fn val_to_json(val: &Val) -> Value {
             obj.insert(
                 "err".to_string(),
                 match opt_box {
-                    Some(v) => val_to_json(v),
+                    Some(v) => val_to_json(v, handles),
                     None => Value::Null,
                 },
             );
@@ -717,14 +804,18 @@ fn val_to_json(val: &Val) -> Value {
         }
 
         Val::Flags(flags) => Value::Array(flags.iter().map(|f| Value::String(f.clone())).collect()),
-        Val::Resource(res) => Value::String(format!("resource: {res:?}")),
+        Val::Resource(res) => {
+            // Store the resource in the handle table and return its handle as an integer
+            let handle = handles.insert(res.clone());
+            Value::Number(handle.into())
+        }
         Val::Future(_) => Value::String("future value".to_string()),
         Val::Stream(_) => Value::String("stream value".to_string()),
         Val::ErrorContext(_) => Value::String("error context".to_string()),
     }
 }
 
-fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
+fn json_to_val(value: &Value, ty: &Type, handles: &mut ResourceHandleTable) -> Result<Val, ValError> {
     match ty {
         Type::Bool => match value {
             Value::Bool(b) => Ok(Val::Bool(*b)),
@@ -824,7 +915,7 @@ fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
             Value::Array(arr) => {
                 let mut vals = Vec::new();
                 for item in arr {
-                    vals.push(json_to_val(item, &list_handle.ty())?);
+                    vals.push(json_to_val(item, &list_handle.ty(), handles)?);
                 }
                 Ok(Val::List(vals))
             }
@@ -837,7 +928,7 @@ fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
                     let value = obj.get(field.name).ok_or_else(|| {
                         ValError::ShapeError("record", format!("missing field {}", field.name))
                     })?;
-                    fields.push((field.name.to_string(), json_to_val(value, &field.ty)?));
+                    fields.push((field.name.to_string(), json_to_val(value, &field.ty, handles)?));
                 }
                 Ok(Val::Record(fields))
             }
@@ -854,7 +945,7 @@ fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
                 }
                 let mut items = Vec::new();
                 for (value, ty) in arr.iter().zip(types) {
-                    items.push(json_to_val(value, &ty)?);
+                    items.push(json_to_val(value, &ty, handles)?);
                 }
                 Ok(Val::Tuple(items))
             }
@@ -876,7 +967,7 @@ fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
                     let val = obj.get("val").ok_or_else(|| {
                         ValError::ShapeError("variant", "missing val".to_string())
                     })?;
-                    Some(Box::new(json_to_val(val, payload_ty)?))
+                    Some(Box::new(json_to_val(val, payload_ty, handles)?))
                 } else {
                     None
                 };
@@ -903,6 +994,7 @@ fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
             v => Ok(Val::Option(Some(Box::new(json_to_val(
                 v,
                 &opt_handle.ty(),
+                handles,
             )?)))),
         },
         Type::Result(res_handle) => match value {
@@ -910,12 +1002,12 @@ fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
                 if let Some(ok_val) = obj.get("ok") {
                     let ok_ty = res_handle.ok().unwrap_or(Type::Bool);
                     Ok(Val::Result(Ok(Some(Box::new(json_to_val(
-                        ok_val, &ok_ty,
+                        ok_val, &ok_ty, handles,
                     )?)))))
                 } else if let Some(err_val) = obj.get("err") {
                     let err_ty = res_handle.err().unwrap_or(Type::Bool);
                     Ok(Val::Result(Err(Some(Box::new(json_to_val(
-                        err_val, &err_ty,
+                        err_val, &err_ty, handles,
                     )?)))))
                 } else {
                     Err(ValError::ShapeError("result", format!("{value:?}")))
@@ -935,7 +1027,21 @@ fn json_to_val(value: &Value, ty: &Type) -> Result<Val, ValError> {
             }
             _ => Err(ValError::ShapeError("flags", format!("{value:?}"))),
         },
-        Type::Own(_) | Type::Borrow(_) => Err(ValError::ResourceError),
+        Type::Own(_) | Type::Borrow(_) => {
+            // Resources are passed as integer handles
+            let handle = value
+                .as_u64()
+                .ok_or_else(|| ValError::ShapeError("resource", format!("expected integer handle, got {value:?}")))?;
+
+            // For `own` types, we take ownership (remove from table)
+            // For `borrow` types, we just get a reference (keep in table)
+            // Note: The distinction between own and borrow is handled by the component model runtime
+            let resource = handles
+                .take(handle)
+                .ok_or(ValError::ResourceError)?;
+
+            Ok(Val::Resource(resource))
+        }
         Type::Future(_) => Err(ValError::ShapeError(
             "future",
             "Future types are not supported for input".to_string(),
@@ -1027,14 +1133,14 @@ mod tests {
 
     #[test]
     fn test_vals_to_json_empty() {
-        let json_val = vals_to_json(&[]);
+        let json_val = vals_to_json(&[], &mut ResourceHandleTable::new());
         assert_eq!(json_val, json!(null));
     }
 
     #[test]
     fn test_vals_to_json_single() {
         let val = Val::Bool(true);
-        let json_val = vals_to_json(std::slice::from_ref(&val));
+        let json_val = vals_to_json(std::slice::from_ref(&val), &mut ResourceHandleTable::new());
         assert_eq!(json_val, json!({"result": true}));
     }
 
@@ -1078,7 +1184,7 @@ mod tests {
     #[test]
     fn test_vals_to_json_multiple_values() {
         let wit_vals = vec![Val::String("example".to_string()), Val::S64(42)];
-        let json_result = vals_to_json(&wit_vals);
+        let json_result = vals_to_json(&wit_vals, &mut ResourceHandleTable::new());
         assert_eq!(
             json_result,
             json!({"result": {"val0": "example", "val1": 42}})
@@ -1088,48 +1194,50 @@ mod tests {
     #[test]
     fn test_val_to_json_bool() {
         let val = Val::Bool(false);
-        assert_eq!(val_to_json(&val), json!(false));
+        assert_eq!(val_to_json(&val, &mut ResourceHandleTable::new()), json!(false));
     }
 
     #[test]
     fn test_val_to_json_numbers() {
+        let mut handles = ResourceHandleTable::new();
         let s8 = Val::S8(-5);
-        assert_eq!(val_to_json(&s8), json!(-5));
+        assert_eq!(val_to_json(&s8, &mut handles), json!(-5));
 
         let u8 = Val::U8(200);
-        assert_eq!(val_to_json(&u8), json!(200));
+        assert_eq!(val_to_json(&u8, &mut handles), json!(200));
 
         let s16 = Val::S16(-123);
-        assert_eq!(val_to_json(&s16), json!(-123));
+        assert_eq!(val_to_json(&s16, &mut handles), json!(-123));
 
         let u16 = Val::U16(123);
-        assert_eq!(val_to_json(&u16), json!(123));
+        assert_eq!(val_to_json(&u16, &mut handles), json!(123));
 
         let s32 = Val::S32(-1000);
-        assert_eq!(val_to_json(&s32), json!(-1000));
+        assert_eq!(val_to_json(&s32, &mut handles), json!(-1000));
 
         let u32 = Val::U32(1000);
-        assert_eq!(val_to_json(&u32), json!(1000));
+        assert_eq!(val_to_json(&u32, &mut handles), json!(1000));
 
         let s64 = Val::S64(-9999);
-        assert_eq!(val_to_json(&s64), json!(-9999));
+        assert_eq!(val_to_json(&s64, &mut handles), json!(-9999));
 
         let u64 = Val::U64(9999);
-        assert_eq!(val_to_json(&u64), json!(9999));
+        assert_eq!(val_to_json(&u64, &mut handles), json!(9999));
     }
 
     #[allow(clippy::approx_constant)]
     #[test]
     fn test_val_to_json_floats() {
+        let mut handles = ResourceHandleTable::new();
         let float32 = Val::Float32(3.14);
-        if let Value::Number(n) = val_to_json(&float32) {
+        if let Value::Number(n) = val_to_json(&float32, &mut handles) {
             assert!((n.as_f64().unwrap() - 3.14).abs() < 1e-6);
         } else {
             panic!("Expected a JSON number for Float32");
         }
 
         let float64 = Val::Float64(2.718281828);
-        if let Value::Number(n) = val_to_json(&float64) {
+        if let Value::Number(n) = val_to_json(&float64, &mut handles) {
             assert!((n.as_f64().unwrap() - 2.718281828).abs() < 1e-9);
         } else {
             panic!("Expected a JSON number for Float64");
@@ -1139,19 +1247,19 @@ mod tests {
     #[test]
     fn test_val_to_json_char() {
         let val = Val::Char('A');
-        assert_eq!(val_to_json(&val), json!("A"));
+        assert_eq!(val_to_json(&val, &mut ResourceHandleTable::new()), json!("A"));
     }
 
     #[test]
     fn test_val_to_json_string() {
         let val = Val::String("hello".to_string());
-        assert_eq!(val_to_json(&val), json!("hello"));
+        assert_eq!(val_to_json(&val, &mut ResourceHandleTable::new()), json!("hello"));
     }
 
     #[test]
     fn test_val_to_json_list() {
         let val = Val::List(vec![Val::S64(1), Val::S64(2)]);
-        assert_eq!(val_to_json(&val), json!([1, 2]));
+        assert_eq!(val_to_json(&val, &mut ResourceHandleTable::new()), json!([1, 2]));
     }
 
     #[test]
@@ -1160,7 +1268,7 @@ mod tests {
             ("key1".to_string(), Val::Bool(true)),
             ("key2".to_string(), Val::String("value".to_string())),
         ]);
-        let json_val = val_to_json(&val);
+        let json_val = val_to_json(&val, &mut ResourceHandleTable::new());
         let obj = json_val.as_object().unwrap();
         assert_eq!(obj.get("key1").unwrap(), &json!(true));
         assert_eq!(obj.get("key2").unwrap(), &json!("value"));
@@ -1169,19 +1277,20 @@ mod tests {
     #[test]
     fn test_val_to_json_tuple() {
         let val = Val::Tuple(vec![Val::S64(42), Val::String("tuple".to_string())]);
-        assert_eq!(val_to_json(&val), json!([42, "tuple"]));
+        assert_eq!(val_to_json(&val, &mut ResourceHandleTable::new()), json!([42, "tuple"]));
     }
 
     #[test]
     fn test_val_to_json_variant() {
+        let mut handles = ResourceHandleTable::new();
         let variant_with = Val::Variant("tag1".to_string(), Some(Box::new(Val::S64(99))));
-        let json_with = val_to_json(&variant_with);
+        let json_with = val_to_json(&variant_with, &mut handles);
         let obj_with = json_with.as_object().unwrap();
         assert_eq!(obj_with.get("tag").unwrap(), &json!("tag1"));
         assert_eq!(obj_with.get("val").unwrap(), &json!(99));
 
         let variant_without = Val::Variant("tag2".to_string(), None);
-        let json_without = val_to_json(&variant_without);
+        let json_without = val_to_json(&variant_without, &mut handles);
         let obj_without = json_without.as_object().unwrap();
         assert_eq!(obj_without.get("tag").unwrap(), &json!("tag2"));
         assert!(obj_without.get("val").is_none());
@@ -1190,37 +1299,39 @@ mod tests {
     #[test]
     fn test_val_to_json_enum() {
         let val = Val::Enum("green".to_string());
-        assert_eq!(val_to_json(&val), json!("green"));
+        assert_eq!(val_to_json(&val, &mut ResourceHandleTable::new()), json!("green"));
     }
 
     #[test]
     fn test_val_to_json_option() {
+        let mut handles = ResourceHandleTable::new();
         let none_option = Val::Option(None);
-        assert_eq!(val_to_json(&none_option), json!(null));
+        assert_eq!(val_to_json(&none_option, &mut handles), json!(null));
 
         let some_option = Val::Option(Some(Box::new(Val::String("some".to_string()))));
-        assert_eq!(val_to_json(&some_option), json!("some"));
+        assert_eq!(val_to_json(&some_option, &mut handles), json!("some"));
     }
 
     #[test]
     fn test_val_to_json_result() {
+        let mut handles = ResourceHandleTable::new();
         let ok_result = Val::Result(Ok(Some(Box::new(Val::String("ok".to_string())))));
-        let json_ok = val_to_json(&ok_result);
+        let json_ok = val_to_json(&ok_result, &mut handles);
         let obj_ok = json_ok.as_object().unwrap();
         assert_eq!(obj_ok.get("ok").unwrap(), &json!("ok"));
 
         let err_result = Val::Result(Err(Some(Box::new(Val::String("err".to_string())))));
-        let json_err = val_to_json(&err_result);
+        let json_err = val_to_json(&err_result, &mut handles);
         let obj_err = json_err.as_object().unwrap();
         assert_eq!(obj_err.get("err").unwrap(), &json!("err"));
 
         let ok_none = Val::Result(Ok(None));
-        let json_ok_none = val_to_json(&ok_none);
+        let json_ok_none = val_to_json(&ok_none, &mut handles);
         let obj_ok_none = json_ok_none.as_object().unwrap();
         assert_eq!(obj_ok_none.get("ok").unwrap(), &json!(null));
 
         let err_none = Val::Result(Err(None));
-        let json_err_none = val_to_json(&err_none);
+        let json_err_none = val_to_json(&err_none, &mut handles);
         let obj_err_none = json_err_none.as_object().unwrap();
         assert_eq!(obj_err_none.get("err").unwrap(), &json!(null));
     }
@@ -1228,7 +1339,7 @@ mod tests {
     #[test]
     fn test_val_to_json_flags() {
         let val = Val::Flags(vec!["f1".to_string(), "f2".to_string()]);
-        assert_eq!(val_to_json(&val), json!(["f1", "f2"]));
+        assert_eq!(val_to_json(&val, &mut ResourceHandleTable::new()), json!(["f1", "f2"]));
     }
 
     #[test]
@@ -1638,21 +1749,22 @@ mod tests {
 
     #[test]
     fn test_wit_to_json_conversions() {
+        let mut handles = ResourceHandleTable::new();
         let wit_bool = Val::Bool(false);
-        assert_eq!(val_to_json(&wit_bool), json!(false));
+        assert_eq!(val_to_json(&wit_bool, &mut handles), json!(false));
 
         let wit_string = Val::String("test".to_string());
-        assert_eq!(val_to_json(&wit_string), json!("test"));
+        assert_eq!(val_to_json(&wit_string, &mut handles), json!("test"));
 
         let wit_list = Val::List(vec![Val::S64(1), Val::S64(2)]);
-        assert_eq!(val_to_json(&wit_list), json!([1, 2]));
+        assert_eq!(val_to_json(&wit_list, &mut handles), json!([1, 2]));
 
         let wit_record = Val::Record(vec![
             ("key1".to_string(), Val::Bool(true)),
             ("key2".to_string(), Val::String("value".to_string())),
         ]);
         assert_eq!(
-            val_to_json(&wit_record),
+            val_to_json(&wit_record, &mut handles),
             json!({
                 "key1": true,
                 "key2": "value"
@@ -1660,20 +1772,20 @@ mod tests {
         );
 
         let wit_option_none = Val::Option(None);
-        assert_eq!(val_to_json(&wit_option_none), json!(null));
+        assert_eq!(val_to_json(&wit_option_none, &mut handles), json!(null));
         let wit_option_some = Val::Option(Some(Box::new(Val::String("some".to_string()))));
-        assert_eq!(val_to_json(&wit_option_some), json!("some"));
+        assert_eq!(val_to_json(&wit_option_some, &mut handles), json!("some"));
 
         let wit_result_ok = Val::Result(Ok(Some(Box::new(Val::String("success".to_string())))));
-        assert_eq!(val_to_json(&wit_result_ok), json!({"ok": "success"}));
+        assert_eq!(val_to_json(&wit_result_ok, &mut handles), json!({"ok": "success"}));
         let wit_result_err = Val::Result(Err(Some(Box::new(Val::String("error".to_string())))));
-        assert_eq!(val_to_json(&wit_result_err), json!({"err": "error"}));
+        assert_eq!(val_to_json(&wit_result_err, &mut handles), json!({"err": "error"}));
     }
 
     #[test]
     fn test_vals_to_json_multiple() {
         let wit_vals = vec![Val::String("example".to_string()), Val::S64(42)];
-        let json_result = vals_to_json(&wit_vals);
+        let json_result = vals_to_json(&wit_vals, &mut ResourceHandleTable::new());
         assert_eq!(
             json_result,
             json!({"result": {"val0": "example", "val1": 42}})
@@ -1682,21 +1794,22 @@ mod tests {
 
     #[test]
     fn test_json_to_eval() {
+        let mut handles = ResourceHandleTable::new();
         let bool_ty = Type::Bool;
         let bool_val = json!(true);
         assert!(matches!(
-            json_to_val(&bool_val, &bool_ty).unwrap(),
+            json_to_val(&bool_val, &bool_ty, &mut handles).unwrap(),
             Val::Bool(true)
         ));
 
         let s8_ty = Type::S8;
         let s8_val = json!(42);
-        assert!(matches!(json_to_val(&s8_val, &s8_ty).unwrap(), Val::S8(42)));
+        assert!(matches!(json_to_val(&s8_val, &s8_ty, &mut handles).unwrap(), Val::S8(42)));
 
         let string_ty = Type::String;
         let string_val = json!("hello");
         assert!(matches!(
-            json_to_val(&string_val, &string_ty).unwrap(),
+            json_to_val(&string_val, &string_ty, &mut handles).unwrap(),
             Val::String(s) if s == "hello"
         ));
     }
@@ -1711,7 +1824,7 @@ mod tests {
             "name": "John",
             "age": 30
         });
-        let vals = json_to_vals(&value, &types).unwrap();
+        let vals = json_to_vals(&value, &types, &mut ResourceHandleTable::new()).unwrap();
         assert_eq!(vals.len(), 2);
         assert!(matches!(&vals[0], Val::String(s) if s == "John"));
         assert!(matches!(&vals[1], Val::S32(30)));
@@ -1719,13 +1832,14 @@ mod tests {
 
     #[test]
     fn test_json_to_val_errors() {
+        let mut handles = ResourceHandleTable::new();
         let bool_ty = Type::Bool;
         let string_val = json!("true");
-        assert!(json_to_val(&string_val, &bool_ty).is_err());
+        assert!(json_to_val(&string_val, &bool_ty, &mut handles).is_err());
 
         let s8_ty = Type::S8;
         let overflow_val = json!(1000);
-        assert!(json_to_val(&overflow_val, &s8_ty).is_err());
+        assert!(json_to_val(&overflow_val, &s8_ty, &mut handles).is_err());
     }
 
     #[test]
@@ -1735,13 +1849,13 @@ mod tests {
             ("age".to_string(), Type::S32),
         ];
         let missing_field = json!({"name": "John"});
-        assert!(json_to_vals(&missing_field, &types).is_err());
+        assert!(json_to_vals(&missing_field, &types, &mut ResourceHandleTable::new()).is_err());
 
         let invalid_type = json!({
             "name": "John",
             "age": "30"
         });
-        assert!(json_to_vals(&invalid_type, &types).is_err());
+        assert!(json_to_vals(&invalid_type, &types, &mut ResourceHandleTable::new()).is_err());
     }
 
     #[test]
@@ -1857,13 +1971,15 @@ mod tests {
             _ => panic!("Expected a type export for '{name}'"),
         };
 
+        let mut handles = ResourceHandleTable::new();
+
         let record_type = get_exported_type("r");
         let original_record = Val::Record(vec![
             ("name".to_string(), Val::String("alpha".to_string())),
             ("value".to_string(), Val::U32(101)),
         ]);
-        let json_record = val_to_json(&original_record);
-        let roundtrip_record = json_to_val(&json_record, &record_type).unwrap();
+        let json_record = val_to_json(&original_record, &mut handles);
+        let roundtrip_record = json_to_val(&json_record, &record_type, &mut handles).unwrap();
         assert_eq!(original_record, roundtrip_record);
 
         let variant_type = get_exported_type("v");
@@ -1871,20 +1987,20 @@ mod tests {
             "s".to_string(),
             Some(Box::new(Val::String("beta".to_string()))),
         );
-        let json_variant = val_to_json(&original_variant);
-        let roundtrip_variant = json_to_val(&json_variant, &variant_type).unwrap();
+        let json_variant = val_to_json(&original_variant, &mut handles);
+        let roundtrip_variant = json_to_val(&json_variant, &variant_type, &mut handles).unwrap();
         assert_eq!(original_variant, roundtrip_variant);
 
         let tuple_type = get_exported_type("t");
         let original_tuple = Val::Tuple(vec![Val::S32(-42), Val::Bool(true)]);
-        let json_tuple = val_to_json(&original_tuple);
-        let roundtrip_tuple = json_to_val(&json_tuple, &tuple_type).unwrap();
+        let json_tuple = val_to_json(&original_tuple, &mut handles);
+        let roundtrip_tuple = json_to_val(&json_tuple, &tuple_type, &mut handles).unwrap();
         assert_eq!(original_tuple, roundtrip_tuple);
 
         let enum_type = get_exported_type("e");
         let original_enum = Val::Enum("dog".to_string());
-        let json_enum = val_to_json(&original_enum);
-        let roundtrip_enum = json_to_val(&json_enum, &enum_type).unwrap();
+        let json_enum = val_to_json(&original_enum, &mut handles);
+        let roundtrip_enum = json_to_val(&json_enum, &enum_type, &mut handles).unwrap();
         assert_eq!(original_enum, roundtrip_enum);
 
         let option_type = get_exported_type("o");
@@ -1893,21 +2009,21 @@ mod tests {
             ("value".to_string(), Val::U32(202)),
         ]);
         let original_some = Val::Option(Some(Box::new(inner_val.clone())));
-        let json_inner = val_to_json(&inner_val);
-        let roundtrip_some = json_to_val(&json_inner, &option_type).unwrap();
+        let json_inner = val_to_json(&inner_val, &mut handles);
+        let roundtrip_some = json_to_val(&json_inner, &option_type, &mut handles).unwrap();
         assert_eq!(original_some, roundtrip_some);
 
         let result_type = get_exported_type("res");
         let ok_inner = Val::Variant("u".to_string(), Some(Box::new(Val::U64(303))));
         let original_ok = Val::Result(Ok(Some(Box::new(ok_inner))));
-        let json_ok = val_to_json(&original_ok);
-        let roundtrip_ok = json_to_val(&json_ok, &result_type).unwrap();
+        let json_ok = val_to_json(&original_ok, &mut handles);
+        let roundtrip_ok = json_to_val(&json_ok, &result_type, &mut handles).unwrap();
         assert_eq!(original_ok, roundtrip_ok);
 
         let flags_type = get_exported_type("f");
         let original_flags = Val::Flags(vec!["read".to_string(), "write".to_string()]);
-        let json_flags = val_to_json(&original_flags);
-        let roundtrip_flags = json_to_val(&json_flags, &flags_type).unwrap();
+        let json_flags = val_to_json(&original_flags, &mut handles);
+        let roundtrip_flags = json_to_val(&json_flags, &flags_type, &mut handles).unwrap();
         assert_eq!(original_flags, roundtrip_flags);
 
         let list_type = get_exported_type("l");
@@ -1915,8 +2031,8 @@ mod tests {
             Val::Tuple(vec![Val::S32(1), Val::Bool(true)]),
             Val::Tuple(vec![Val::S32(2), Val::Bool(false)]),
         ]);
-        let json_list = val_to_json(&original_list);
-        let roundtrip_list = json_to_val(&json_list, &list_type).unwrap();
+        let json_list = val_to_json(&original_list, &mut handles);
+        let roundtrip_list = json_to_val(&json_list, &list_type, &mut handles).unwrap();
         assert_eq!(original_list, roundtrip_list);
     }
 

@@ -15,7 +15,8 @@ use anyhow::{anyhow, bail, Context, Result};
 use component2json::{
     component_exports_to_json_schema, component_exports_to_json_schema_with_docs,
     component_exports_to_tools, component_exports_to_tools_with_docs, create_placeholder_results,
-    extract_package_docs, json_to_vals, vals_to_json, FunctionIdentifier, ToolMetadata,
+    extract_package_docs, json_to_vals, vals_to_json, FunctionIdentifier, ResourceHandleTable,
+    ToolMetadata,
 };
 use etcetera::BaseStrategy;
 use serde::{Deserialize, Serialize};
@@ -304,6 +305,8 @@ pub struct LifecycleManager {
     oci_client: Arc<oci_wasm::WasmClient>,
     http_client: reqwest::Client,
     secrets_manager: Arc<SecretsManager>,
+    /// Resource handle tables per component, enabling resources to persist across calls
+    resource_handles: Arc<tokio::sync::Mutex<HashMap<String, ResourceHandleTable>>>,
 }
 
 /// A representation of a loaded component instance. It contains both the base component info and a
@@ -370,6 +373,7 @@ impl LifecycleManager {
             oci_client,
             http_client,
             secrets_manager,
+            resource_handles: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         })
     }
 
@@ -1052,7 +1056,14 @@ impl LifecycleManager {
         };
 
         let params: serde_json::Value = serde_json::from_str(parameters)?;
-        let argument_vals = json_to_vals(&params, &func.params(&store))?;
+
+        // Get or create the handle table for this component (persists across calls)
+        let mut handles_guard = self.resource_handles.lock().await;
+        let handles = handles_guard
+            .entry(component_id.to_string())
+            .or_insert_with(ResourceHandleTable::new);
+
+        let argument_vals = json_to_vals(&params, &func.params(&store), handles)?;
 
         let mut results = create_placeholder_results(&func.results(&store));
 
@@ -1076,7 +1087,7 @@ impl LifecycleManager {
             return Err(e);
         }
 
-        let result_json = vals_to_json(&results);
+        let result_json = vals_to_json(&results, handles);
 
         let total_duration = start_time.elapsed();
 

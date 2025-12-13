@@ -6,7 +6,7 @@ A Rust library for converting WebAssembly Components to JSON Schema and handling
 
 ```rust
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
-use component2json::{component_exports_to_json_schema, json_to_vals, vals_to_json, create_placeholder_results};
+use component2json::{component_exports_to_json_schema, json_to_vals, vals_to_json, create_placeholder_results, ResourceHandleTable};
 use wasmtime::component::{Component, Type, Val};
 use wasmtime::Engine;
 
@@ -29,18 +29,21 @@ let func_param_types = vec![
     ("value".to_string(), Type::U32),
 ];
 
+// Create a handle table for resource management
+let mut handles = ResourceHandleTable::new();
+
 // Convert a JSON object to WIT values according to the function's parameter types
 let json_args = serde_json::json!({
     "name": "example",
     "value": 42
 });
-let wit_vals = json_to_vals(&json_args, &func_param_types)?;
+let wit_vals = json_to_vals(&json_args, &func_param_types, &mut handles)?;
 
 // Convert WIT values back to JSON
-let json_result = vals_to_json(&wit_vals);
+let json_result = vals_to_json(&wit_vals, &mut handles);
 assert_eq!(json_result, serde_json::json!({"result": {"val0": "example", "val1": 42}}));
 
-// Create placeholder results for function call results
+// Create placeholder results for function call calls
 // This is useful when you need to prepare storage for function return values
 let result_types = vec![Type::String, Type::U32];
 let placeholder_results = create_placeholder_results(&result_types);
@@ -184,9 +187,11 @@ The generated `outputSchema` for each tool mirrors this shape, ensuring downstre
 
 ##### Resources
 
+Resources are represented as integer handles that reference live resource instances in a `ResourceHandleTable`:
+
 ```json
 {
-    "type": "string",
-    "description": "RESOURCE_TYPE resource: RESOURCE_NAME"
+    "type": "integer",
+    "description": "Handle to owned/borrowed resource: RESOURCE_NAME"
 }
 ```
