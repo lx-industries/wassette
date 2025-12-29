@@ -21,9 +21,9 @@ use etcetera::BaseStrategy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::fs::DirEntry;
-use tokio::sync::{RwLock, Semaphore};
+use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::{debug, info, instrument, warn};
-use wasmtime::component::{Component, InstancePre};
+use wasmtime::component::{Component, Instance, InstancePre};
 use wasmtime::Store;
 
 mod component_storage;
@@ -147,6 +147,22 @@ pub struct ComponentLoadOutcome {
     pub status: LoadResult,
     /// Normalized tool names exposed by the component after registration.
     pub tool_names: Vec<String>,
+}
+
+/// Options for loading a component.
+#[derive(Debug, Clone, Default)]
+pub struct LoadOptions {
+    /// When true, the component's Store and Instance persist across tool calls,
+    /// enabling in-memory state and WASI resource continuity.
+    /// Concurrent calls to stateful components are serialized.
+    pub stateful: bool,
+}
+
+/// A persistent Store/Instance pair for stateful components.
+/// The mutex ensures concurrent calls are serialized.
+struct StatefulInstance {
+    store: Store<WassetteWasiState<WasiState>>,
+    instance: Instance,
 }
 
 impl ComponentRegistry {
@@ -304,6 +320,11 @@ pub struct LifecycleManager {
     oci_client: Arc<oci_wasm::WasmClient>,
     http_client: reqwest::Client,
     secrets_manager: Arc<SecretsManager>,
+    /// Cached Store/Instance pairs for stateful components.
+    /// The outer Arc<Mutex<>> serializes concurrent calls to the same component.
+    stateful_instances: Arc<Mutex<HashMap<String, StatefulInstance>>>,
+    /// Tracks which components are loaded in stateful mode.
+    stateful_components: Arc<RwLock<std::collections::HashSet<String>>>,
 }
 
 /// A representation of a loaded component instance. It contains both the base component info and a
@@ -370,6 +391,8 @@ impl LifecycleManager {
             oci_client,
             http_client,
             secrets_manager,
+            stateful_instances: Arc::new(Mutex::new(HashMap::new())),
+            stateful_components: Arc::new(RwLock::new(std::collections::HashSet::new())),
         })
     }
 
