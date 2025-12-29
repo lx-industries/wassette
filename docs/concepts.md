@@ -79,6 +79,41 @@ graph LR
 
 When you load a component in Wassette, the system first loads the WebAssembly component using the Wasmtime runtime, then examines the component's WIT interface to discover exported functions. Each function's parameters and return types are converted to JSON Schema, and each function becomes an MCP tool with a name, description, and parameter schema. When an AI agent calls a tool, Wassette executes the corresponding function in the sandboxed Wasm environment.
 
+### Stateful vs Stateless Components
+
+By default, Wassette creates a fresh WebAssembly Store and Instance for each tool call. This **stateless mode** ensures complete isolation between calls but means components cannot maintain in-memory state.
+
+For components that need to preserve state across calls (caches, counters, open file handles, database connections), Wassette supports **stateful mode**:
+
+```rust
+// Load a component in stateful mode
+manager.load_component_with_options(
+    "oci://example/memory-component",
+    LoadOptions { stateful: true }
+).await?;
+```
+
+**Key characteristics of stateful mode:**
+
+- **Persistent Store/Instance**: The WebAssembly Store and Instance persist across tool calls
+- **In-memory state**: Component globals, heap allocations, and static data survive between calls
+- **Resource continuity**: WASI resources (file handles, sockets) remain valid across calls
+- **Serialized execution**: Concurrent calls to the same stateful component are queued to prevent race conditions
+- **Process-scoped lifetime**: State persists until the component is unloaded or the process exits
+
+**When to use stateful mode:**
+
+- Knowledge graph or memory components that accumulate data
+- Components with expensive initialization (loading models, parsing configs)
+- Components managing persistent connections or sessions
+- Caching layers that benefit from warm state
+
+**When to use stateless mode (default):**
+
+- Stateless utility functions (formatting, calculations)
+- Components where isolation between calls is important
+- When you want predictable, reproducible behavior
+
 ### Example Flow
 
 ```mermaid
